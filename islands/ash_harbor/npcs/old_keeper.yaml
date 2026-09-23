@@ -1,0 +1,6 @@
+id: ash_harbor.npc.old_keeper
+name: 늙은 등대지기
+role: 퀘스트 제공
+personality: 말수가 적고 문장을 끝맺지 않는다. 바다 쪽을 보며 대답한다.
+wants: 종을 다시 울려 안개를 걷어내는 것
+secret: 종을 멈춘 사람이 자기 자신이다 (공개 조건은 gm.md)

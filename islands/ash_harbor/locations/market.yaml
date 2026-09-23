@@ -1,0 +1,14 @@
+id: ash_harbor.loc.market
+name: 무너진 시장
+description: 천막이 반쯤 주저앉은 채 젖어 있다. 누군가 급히 떠난 흔적이 곳곳에 남았다.
+map_position: { x: 50, y: 45 }
+spots:
+  - { id: ash_harbor.spot.stall, name: 부서진 노점 }
+  - { id: ash_harbor.spot.well, name: 마른 우물 }
+connections:
+  - ash_harbor.loc.docks
+  - to: ash_harbor.loc.lighthouse
+    requires_flags: [ash_harbor.flag.key_found]      # 꺼져 있으면 '잠김'
+  - to: ash_harbor.loc.cellar
+    hidden_until_flags: [ash_harbor.flag.map_read]   # 꺼져 있으면 보이지 않음
+events: [ash_harbor.event.market_ambush]

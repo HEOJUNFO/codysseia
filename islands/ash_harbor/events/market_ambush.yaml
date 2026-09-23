@@ -1,0 +1,7 @@
+id: ash_harbor.event.market_ambush
+trigger: 시장에 처음 들어갈 때
+requires_flags: []
+sets_flags: [ash_harbor.flag.ambushed]
+content: |
+  천막 아래에서 익사자 둘이 일어선다. 싸우거나 부두로 물러날 수 있다.
+  쓰러진 익사자의 주머니에서 등대 열쇠가 나온다 → ash_harbor.flag.key_found

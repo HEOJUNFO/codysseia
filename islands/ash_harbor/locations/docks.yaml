@@ -1,0 +1,10 @@
+id: ash_harbor.loc.docks
+name: 부두
+description: 썩은 널판 위로 안개가 낮게 깔렸다. 배를 묶는 밧줄이 바람 없이 흔들린다. 섬에 들어오고 나가는 곳.
+map_position: { x: 30, y: 75 }
+image: assets/docks.svg
+spots:
+  - { id: ash_harbor.spot.pier_end, name: 부두 끝, position: { x: 20, y: 60 } }
+  - { id: ash_harbor.spot.boathouse, name: 보트 창고, position: { x: 70, y: 45 } }
+connections:
+  - ash_harbor.loc.market

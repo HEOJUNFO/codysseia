@@ -1,0 +1,15 @@
+# 예시 섬 — 새 섬을 만들 때 폴더째 복사해서 ID와 내용을 바꾼다.
+# 규칙: docs/01_섬_제작_템플릿.md, docs/00_대전제.md 8절
+id: ash_harbor
+name: 잿빛 항구
+author: 예시
+concept: 종이 멈춘 뒤로 안개가 걷히지 않는 항구. 등대지기는 종을 다시 울릴 방법을 알고 있다.
+tone: 쓸쓸하고 축축한 미스터리
+recommended_level: 1-2
+expected_sessions: 1
+safe_zones: [ash_harbor.loc.lighthouse]
+entry_location: ash_harbor.loc.docks
+departure_locations: [ash_harbor.loc.docks]
+entry_requires_flags: []
+archipelago_position: { x: 25, y: 40 }
+map_image: assets/map.svg

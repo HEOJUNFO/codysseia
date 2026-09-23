@@ -1,0 +1,5 @@
+# 다른 섬이 참조해도 되는 것만 적는다 (대전제 8.4).
+npcs: [ash_harbor.npc.old_keeper]
+flags: [ash_harbor.flag.bell_rung]
+rumors:
+  - "동쪽 항구의 종이 다시 울렸다는 소문"

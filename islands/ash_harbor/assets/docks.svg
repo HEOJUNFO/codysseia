@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+  <rect width="1600" height="900" fill="#334155"/>
+  <rect y="600" width="1600" height="300" fill="#1e293b"/>
+  <rect x="100" y="520" width="700" height="60" fill="#78716c"/>
+  <rect x="1000" y="300" width="400" height="260" fill="#57534e"/>
+  <text x="800" y="860" text-anchor="middle" font-size="40" fill="#94a3b8">부두 (임시 배경)</text>
+</svg>

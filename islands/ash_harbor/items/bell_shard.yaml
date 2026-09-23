@@ -1,0 +1,6 @@
+id: ash_harbor.item.bell_shard
+name: 종의 파편
+grade: 희귀                     # 일반 | 고급 | 희귀 | 전설 (희귀 최대 3, 전설 최대 1)
+effects:
+  - { type: resist, value: 정신력 피해 -1 }
+island_bound: false

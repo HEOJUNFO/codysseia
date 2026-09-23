@@ -1,0 +1,9 @@
+id: ash_harbor.loc.lighthouse
+name: 등대
+description: 불 꺼진 등대. 안은 마르고 따뜻하다. 섬에서 유일하게 긴 휴식을 할 수 있는 곳.
+map_position: { x: 78, y: 20 }
+spots:
+  - { id: ash_harbor.spot.lamp_room, name: 등불실 }
+  - { id: ash_harbor.spot.keeper_desk, name: 등대지기의 책상 }
+connections:
+  - ash_harbor.loc.market

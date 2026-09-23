@@ -1,0 +1,6 @@
+id: ash_harbor.loc.cellar
+name: 우물 밑 지하실
+description: 마른 우물 아래로 이어진 좁은 방. 멈춘 종의 추가 여기 매달려 있다.
+map_position: { x: 45, y: 60 }
+connections:
+  - ash_harbor.loc.market

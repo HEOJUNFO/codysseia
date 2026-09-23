@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000">
+  <rect width="1000" height="1000" fill="#1e293b"/>
+  <path d="M180 820 C120 600 260 380 420 300 C560 220 760 80 880 180 C960 260 900 460 820 560 C720 700 560 900 180 820 Z" fill="#475569" stroke="#94a3b8" stroke-width="6"/>
+  <text x="500" y="960" text-anchor="middle" font-size="36" fill="#94a3b8">잿빛 항구 (임시 지도)</text>
+</svg>
