@@ -1,15 +1,17 @@
 "use client";
 
 // 군도 지도 (코어 소유, 대전제 8.7). 섬 위치는 각 섬의 archipelago_position.
-// 출발 지역에 있을 때만 다른 섬을 눌러 건너갈 수 있다.
+// 출발 지역에 있을 때만 다른 섬을 눌러 건너갈 수 있다. 항해 시간은 거리에 비례한다 (8.6).
 
 import { useGameState, useMove } from "@/lib/play/provider";
+import { formatHours } from "@/lib/play/time";
 import { MapStage, Marker, type MarkerTone } from "./map-stage";
 
 export function ArchipelagoMap() {
   const { archipelago, moves, pending } = useGameState();
   const move = useMove();
   const travel = new Map(moves.islands.map((i) => [i.id, i.locked]));
+  const hours = new Map(moves.islands.map((i) => [i.id, i.hours]));
 
   const tone = (id: string, current: boolean): MarkerTone => {
     if (current) return "current";
@@ -26,7 +28,7 @@ export function ArchipelagoMap() {
               key={i.id}
               stage={stage}
               point={i.position}
-              label={i.name}
+              label={hours.has(i.id) ? `${i.name} · ${formatHours(hours.get(i.id)!)}` : i.name}
               tone={tone(i.id, i.current)}
               onSelect={!pending && travel.get(i.id) === false ? () => move.toIsland(i.id) : undefined}
             />

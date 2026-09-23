@@ -87,12 +87,15 @@ export function Marker({
   point,
   label,
   tone,
+  selected = false,
   onSelect,
 }: {
   stage: Stage;
   point: Point;
   label: string;
   tone: MarkerTone;
+  /** 고른 마커에 바깥 고리를 두른다 */
+  selected?: boolean;
   onSelect?: () => void;
 }) {
   const { x, y } = stage.at(point);
@@ -112,9 +115,10 @@ export function Marker({
         }
       }}
     >
+      {selected ? <circle r={u * 2.2} strokeWidth={u * 0.25} className="fill-none stroke-white" /> : null}
       <circle r={u * 1.3} strokeWidth={u * 0.3} strokeDasharray={tone === "locked" ? `${u * 0.6} ${u * 0.4}` : undefined} className={TONE[tone]} />
       <text
-        y={-u * 2.1}
+        y={-u * (selected ? 2.9 : 2.1)}
         textAnchor="middle"
         fontSize={u * 2}
         className="fill-white font-medium"

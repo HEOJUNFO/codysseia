@@ -1,6 +1,7 @@
 "use client";
 
 import { useGameState, useMove } from "@/lib/play/provider";
+import { formatHours } from "@/lib/play/time";
 
 const chip =
   "rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-800";
@@ -15,7 +16,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function LocationPanel() {
-  const { place, moves, pending, inCombat } = useGameState();
+  const { place, moves, pending, inCombat, time } = useGameState();
   const move = useMove();
   if (!place) return <p className="p-3 text-sm text-zinc-500">플레이할 수 있는 섬이 없다.</p>;
 
@@ -24,6 +25,7 @@ export function LocationPanel() {
       <section>
         <div className="text-xs text-zinc-500">{place.islandName}</div>
         <div className="text-base font-semibold">{place.locationName}</div>
+        <div className="mt-1 text-xs text-zinc-500">게임 시간 {time > 0 ? `${formatHours(time)} 경과` : "시작"}</div>
         {inCombat ? <div className="mt-1 text-xs text-rose-500">전투 중 — 지점 이동만 가능</div> : null}
       </section>
 
@@ -61,10 +63,10 @@ export function LocationPanel() {
               key={i.id}
               className={chip}
               disabled={pending || i.locked}
-              title={i.locked ? "아직 들어갈 수 없다" : undefined}
+              title={i.locked ? "아직 들어갈 수 없다" : `항해 ${formatHours(i.hours)}`}
               onClick={() => move.toIsland(i.id)}
             >
-              {i.name}
+              {i.name} · {formatHours(i.hours)}
               {i.locked ? " · 잠김" : ""}
             </button>
           ))}

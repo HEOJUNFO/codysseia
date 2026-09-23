@@ -36,8 +36,8 @@ export type Moves = {
   locations: { id: string; name: string; locked: boolean }[];
   /** 현재 지역의 지점 */
   spots: { id: string; name: string }[];
-  /** 출발 지역에 있을 때만 채워지는 다른 섬 */
-  islands: { id: string; name: string; locked: boolean }[];
+  /** 출발 지역에 있을 때만 채워지는 다른 섬. hours 는 항해 시간 */
+  islands: { id: string; name: string; locked: boolean; hours: number }[];
 };
 
 /** 지도 위 퍼센트 좌표. 이미지 왼쪽 위 (0,0) ~ 오른쪽 아래 (100,100) */
@@ -45,6 +45,15 @@ export type Point = { x: number; y: number };
 
 /** 군도 지도: 플레이 가능한 모든 섬 */
 export type ArchipelagoIsland = { id: string; name: string; position: Point; current: boolean };
+
+/** 마지막 섬 간 항해. id 가 바뀌면 화면이 항해 연출을 한 번 보여준다 */
+export type Voyage = {
+  id: number;
+  from: { id: string; name: string; position: Point };
+  to: { id: string; name: string; position: Point };
+  /** 게임 안에서 걸린 시간 */
+  hours: number;
+};
 
 /** 섬 지도: 현재 섬에서 발견한 지역과 보이는 길만 */
 export type IslandMapData = {
@@ -73,6 +82,10 @@ export type GameState = {
   islandMap: IslandMapData;
   locationView: LocationViewData;
   inCombat: boolean;
+  /** 게임 시간. 시작부터 흐른 시간(시간 단위) */
+  time: number;
+  /** 마지막 섬 간 항해. 아직 없으면 null */
+  voyage: Voyage | null;
   log: LogEntry[];
   /** 엔진·GM 응답을 기다리는 중 */
   pending: boolean;

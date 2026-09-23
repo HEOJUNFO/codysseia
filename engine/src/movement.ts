@@ -1,5 +1,5 @@
 // 세 단계 이동 (대전제 8.6):
-//   섬 간    travelToIsland  — 출발 가능 지역에서만, 도착 섬의 entry_location 으로
+//   섬 간    travelToIsland  — 출발 가능 지역에서만, 도착 섬의 entry_location 으로. 군도 지도 거리만큼 시간이 흐른다
 //   지역 간  moveToLocation  — 현재 지역의 connections 를 따라서
 //   지역 안  moveToSpot      — 캐릭터마다 따로
 // 모든 함수는 순수 함수다. 상태를 고치지 않고 새 상태를 돌려준다.
@@ -22,6 +22,7 @@ export type MoveErrorCode =
 export type MoveError = { code: MoveErrorCode; message: string };
 
 export type MoveEvent =
+  | { type: "voyage"; from: IslandId; to: IslandId; hours: number }
   | { type: "island_entered"; islandId: IslandId }
   | { type: "location_entered"; locationId: LocationId; firstVisit: boolean }
   | { type: "spot_changed"; characterId: CharacterId; spotId: SpotId | null };
@@ -32,9 +33,17 @@ export type AvailableMoves = {
   /** 보이는 연결. locked 면 보이지만 지나갈 수 없다 */
   locations: { id: LocationId; name: string; locked: boolean }[];
   spots: { id: SpotId; name: string }[];
-  /** 출발 가능 지역에 있을 때만 채워진다 */
-  islands: { id: IslandId; name: string; locked: boolean }[];
+  /** 출발 가능 지역에 있을 때만 채워진다. hours 는 항해 시간 */
+  islands: { id: IslandId; name: string; locked: boolean; hours: number }[];
 };
+
+/** 군도 지도 거리 1(퍼센트 좌표)당 항해 시간. 지도 끝에서 끝(약 100)이 4일 남짓 */
+export const VOYAGE_HOURS_PER_UNIT = 1;
+
+/** 두 섬 사이 항해 시간(시간 단위). 군도 지도 위 직선거리에 비례하고 최소 1시간 */
+export function voyageHours(from: Point, to: Point): number {
+  return Math.max(1, Math.round(Math.hypot(to.x - from.x, to.y - from.y) * VOYAGE_HOURS_PER_UNIT));
+}
 
 function fail(code: MoveErrorCode, message: string): MoveResult {
   return { ok: false, error: { code, message } };
@@ -86,6 +95,7 @@ export function startGame(world: World, members: CharacterId[], islandId: Island
     discovered: [],
     flags: [],
     inCombat: false,
+    time: 0,
   };
   return enterLocation(world, blank, island.entryLocation).state;
 }
@@ -99,11 +109,17 @@ export function availableMoves(world: World, state: EngineState): AvailableMoves
     .filter((c) => isVisible(c, state.flags) && world.locations[c.to])
     .map((c) => ({ id: c.to, name: world.locations[c.to].name, locked: !allSet(state.flags, c.requiresFlags) }));
 
+  const here = world.islands[state.party.islandId];
   const atDeparture = departurePoints(world, state.party.islandId).includes(state.party.locationId);
-  const islands = atDeparture
+  const islands = atDeparture && here
     ? Object.values(world.islands)
         .filter((i) => i.id !== state.party.islandId)
-        .map((i) => ({ id: i.id, name: i.name, locked: !allSet(state.flags, i.entryRequiresFlags) }))
+        .map((i) => ({
+          id: i.id,
+          name: i.name,
+          locked: !allSet(state.flags, i.entryRequiresFlags),
+          hours: voyageHours(here.position, i.position),
+        }))
     : [];
 
   return { locations, spots, islands };
@@ -151,11 +167,14 @@ export function travelToIsland(world: World, state: EngineState, islandId: Islan
   }
   if (!allSet(state.flags, target.entryRequiresFlags)) return fail("island_locked", `아직 ${target.name}에 들어갈 수 없다.`);
 
+  const from = state.party.islandId;
+  const hours = voyageHours(world.islands[from].position, target.position);
   const entered = enterLocation(world, state, target.entryLocation);
   return {
     ok: true,
-    state: entered.state,
+    state: { ...entered.state, time: state.time + hours },
     events: [
+      { type: "voyage", from, to: islandId, hours },
       { type: "island_entered", islandId },
       { type: "location_entered", locationId: target.entryLocation, firstVisit: entered.firstVisit },
     ],

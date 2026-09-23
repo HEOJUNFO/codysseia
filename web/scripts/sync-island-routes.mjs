@@ -82,16 +82,29 @@ function findRouteFiles(dir) {
   return found;
 }
 
-function readIslandName(islandDir, islandId) {
+// 섬 목록·메인 군도 지도에 보여줄 소개. 준비 중인 섬도 island.yaml 을 읽을 수 있는 만큼 읽는다.
+function readIslandInfo(islandDir, islandId) {
+  const info = { name: islandId, author: null, concept: null, tone: null, recommendedLevel: null, position: null };
   const file = path.join(islandDir, "island.yaml");
-  if (!fs.existsSync(file)) return islandId;
+  if (!fs.existsSync(file)) return info;
+  let data;
   try {
-    const data = parse(fs.readFileSync(file, "utf8"));
-    return typeof data?.name === "string" && data.name.trim() ? data.name.trim() : islandId;
+    data = parse(fs.readFileSync(file, "utf8"));
   } catch (err) {
     console.warn(`[sync-island-routes] ${posix(path.relative(repoDir, file))} 읽기 실패: ${err.message}`);
-    return islandId;
+    return info;
   }
+  const text = (v) => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
+  const pos = data?.archipelago_position;
+  const inRange = (n) => typeof n === "number" && n >= 0 && n <= 100;
+  return {
+    name: text(data?.name) ?? islandId,
+    author: text(data?.author),
+    concept: text(data?.concept),
+    tone: text(data?.tone),
+    recommendedLevel: text(data?.recommended_level),
+    position: inRange(pos?.x) && inRange(pos?.y) ? { x: pos.x, y: pos.y } : null,
+  };
 }
 
 function writeStub(islandId, webRoot, source) {
@@ -133,7 +146,7 @@ function sync() {
       if (fs.existsSync(path.join(islandDir, "assets"))) writeAssetRoute(id);
       loadedIslands.push(island);
     }
-    islands.push({ id, name: readIslandName(islandDir, id), playable, problems, warnings: [] });
+    islands.push({ id, ...readIslandInfo(islandDir, id), playable, problems, warnings: [] });
   }
 
   const warnings = archipelagoWarnings(loadedIslands);
@@ -145,7 +158,19 @@ function sync() {
     manifestFile,
     [
       HEADER,
-      "export type IslandEntry = { id: string; name: string; playable: boolean; problems: string[]; warnings: string[] };",
+      "export type IslandEntry = {",
+      "  id: string;",
+      "  name: string;",
+      "  author: string | null;",
+      "  concept: string | null;",
+      "  tone: string | null;",
+      "  recommendedLevel: string | null;",
+      "  /** 군도 지도 위치. island.yaml 에 없거나 잘못되면 null */",
+      "  position: { x: number; y: number } | null;",
+      "  playable: boolean;",
+      "  problems: string[];",
+      "  warnings: string[];",
+      "};",
       `export const islands: readonly IslandEntry[] = ${JSON.stringify(islands, null, 2)};`,
       "",
     ].join("\n"),

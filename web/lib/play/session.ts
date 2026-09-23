@@ -18,13 +18,22 @@ import {
 } from "@codysseia/engine";
 import { assetUrl } from "@/lib/island-assets";
 import { islands } from "@/lib/islands.generated";
-import type { Character, GameState, Item, LogEntry, MoveRequest } from "./types";
+import { formatHours } from "./time";
+import type { Character, GameState, Item, LogEntry, MoveRequest, Voyage } from "./types";
 
 const ISLANDS_DIR = path.resolve(process.cwd(), "..", "islands");
 const START_ISLAND = "hub";
 
 type Stats = Omit<Character, "spotId">;
-type Session = { engine: EngineState | null; stats: Stats[]; inventory: Item[]; log: LogEntry[]; nextLogId: number };
+type Session = {
+  engine: EngineState | null;
+  stats: Stats[];
+  inventory: Item[];
+  log: LogEntry[];
+  nextLogId: number;
+  /** 마지막 섬 간 항해 (화면 연출용) */
+  voyage: Voyage | null;
+};
 
 // 개발 서버 핫 리로드에도 세션이 유지되도록 globalThis 에 둔다.
 const store = globalThis as typeof globalThis & { __codysseiaSession?: Session };
@@ -42,8 +51,13 @@ function session(): Session {
     ],
     log: [],
     nextLogId: 0,
+    voyage: null,
   };
-  return store.__codysseiaSession;
+  const s = store.__codysseiaSession;
+  // 게임 시간이 생기기 전에 만든 세션(개발 서버 핫 리로드)을 이어 쓸 때
+  if (s.engine && typeof s.engine.time !== "number") s.engine = { ...s.engine, time: 0 };
+  s.voyage ??= null;
+  return s;
 }
 
 function addLog(s: Session, role: LogEntry["role"], text: string) {
@@ -69,6 +83,7 @@ function ensureStarted(s: Session, world: World): EngineState | null {
   const start = ids.includes(START_ISLAND) ? START_ISLAND : ids[0];
   s.engine = startGame(world, s.stats.map((c) => c.id), start);
   s.log = [];
+  s.voyage = null;
   addLog(s, "system", "엔진 연결됨 · GM 미연결 — GM 서술은 가짜 문장입니다. 새 게임을 시작합니다.");
   narrateArrival(s, world, s.engine.party.locationId, true);
   return s.engine;
@@ -83,6 +98,18 @@ function narrateArrival(s: Session, world: World, locationId: string, firstVisit
 
 function applyEvents(s: Session, world: World, events: MoveEvent[]) {
   for (const e of events) {
+    if (e.type === "voyage") {
+      const from = world.islands[e.from];
+      const to = world.islands[e.to];
+      s.voyage = {
+        id: (s.voyage?.id ?? 0) + 1,
+        from: { id: from.id, name: from.name, position: from.position },
+        to: { id: to.id, name: to.name, position: to.position },
+        hours: e.hours,
+      };
+      // GM 이 연결되면 이 이벤트를 GM 턴에 넘겨 항해 서술을 받는다 (대전제 8.6, 9.3).
+      addLog(s, "gm", `(가짜 GM) ${from.name}을(를) 떠나 ${formatHours(e.hours)} 동안 바다를 건넜다.`);
+    }
     if (e.type === "island_entered") addLog(s, "system", `섬 이동 → ${world.islands[e.islandId].name}`);
     if (e.type === "location_entered") narrateArrival(s, world, e.locationId, e.firstVisit);
   }
@@ -118,9 +145,17 @@ function snapshot(s: Session, world: World): GameState {
       spots: loc ? loc.spots.map((sp) => ({ id: sp.id, name: sp.name, position: sp.position ?? null })) : [],
     },
     inCombat: engine?.inCombat ?? false,
+    time: engine?.time ?? 0,
+    voyage: s.voyage,
     log: [...s.log],
     pending: false,
   };
+}
+
+/** 게임을 새로 시작하지 않고 파티 위치만 본다 (메인 군도 지도용). 아직 게임이 없으면 null */
+export function peekParty(): { islandId: string; time: number } | null {
+  const engine = store.__codysseiaSession?.engine;
+  return engine ? { islandId: engine.party.islandId, time: engine.time } : null;
 }
 
 export function getSnapshot(): GameState {

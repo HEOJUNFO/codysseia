@@ -1,6 +1,6 @@
 import { expect } from "./expect.ts";
 import { describe, it } from "node:test";
-import { availableMoves, islandMapView, moveToLocation, moveToSpot, startGame, travelToIsland } from "../src/index.ts";
+import { availableMoves, islandMapView, moveToLocation, moveToSpot, startGame, travelToIsland, voyageHours } from "../src/index.ts";
 import type { EngineState, World } from "../src/index.ts";
 
 // ash: docks(출발) ↔ market → lighthouse(잠김) , market → cellar(숨김)
@@ -48,6 +48,7 @@ describe("startGame", () => {
     expect(s.party.spots).toEqual({ "pc.a": null, "pc.b": null });
     expect(s.visited).toEqual(["ash.loc.docks"]);
     expect(s.discovered).toEqual(["ash.loc.docks", "ash.loc.market"]);
+    expect(s.time).toBe(0);
   });
 });
 
@@ -138,7 +139,7 @@ describe("지역 안 이동 (지점)", () => {
 describe("섬 간 이동", () => {
   it("출발 지역(기본 entry_location)에서만 섬 목록이 보인다", () => {
     const docks = startGame(world, members, "ash");
-    expect(availableMoves(world, docks).islands).toEqual([{ id: "fog", name: "안개 섬", locked: true }]);
+    expect(availableMoves(world, docks).islands).toEqual([{ id: "fog", name: "안개 섬", locked: true, hours: 58 }]);
     const market = ok(moveToLocation(world, docks, "ash.loc.market"));
     expect(availableMoves(world, market).islands).toEqual([]);
     const r = travelToIsland(world, withFlags(market, "ash.flag.bell_rung"), "fog");
@@ -152,10 +153,23 @@ describe("섬 간 이동", () => {
 
   it("도착 섬의 entry_location 으로 간다", () => {
     const r = travelToIsland(world, withFlags(startGame(world, members, "ash"), "ash.flag.bell_rung"), "fog");
-    expect(r.ok && r.events.map((e) => e.type)).toEqual(["island_entered", "location_entered"]);
+    expect(r.ok && r.events.map((e) => e.type)).toEqual(["voyage", "island_entered", "location_entered"]);
     const s = ok(r);
     expect(s.party.islandId).toBe("fog");
     expect(s.party.locationId).toBe("fog.loc.pier");
+  });
+
+  it("군도 지도 거리만큼 게임 시간이 흐르고 항해 이벤트를 낸다", () => {
+    // ash (20,30) → fog (70,60): 거리 √(50² + 30²) ≈ 58.3 → 58시간
+    const r = travelToIsland(world, withFlags(startGame(world, members, "ash"), "ash.flag.bell_rung"), "fog");
+    expect(r.ok && r.events[0]).toEqual({ type: "voyage", from: "ash", to: "fog", hours: 58 });
+    expect(ok(r).time).toBe(58);
+  });
+
+  it("항해 시간은 거리에 비례하고 아무리 가까워도 1시간은 걸린다", () => {
+    expect(voyageHours({ x: 0, y: 0 }, { x: 30, y: 40 })).toBe(50);
+    expect(voyageHours({ x: 0, y: 0 }, { x: 60, y: 80 })).toBe(100);
+    expect(voyageHours({ x: 10, y: 10 }, { x: 10, y: 10 })).toBe(1);
   });
 
   it("departure_locations 를 지정하면 그 지역에서만 떠날 수 있다", () => {

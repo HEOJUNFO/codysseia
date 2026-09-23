@@ -70,4 +70,6 @@ export type EngineState = {
   discovered: LocationId[];
   flags: FlagId[];
   inCombat: boolean;
+  /** 게임 시간. 시작부터 흐른 시간(시간 단위). 지금은 섬 간 항해만 시간을 쓴다 (대전제 8.6) */
+  time: number;
 };

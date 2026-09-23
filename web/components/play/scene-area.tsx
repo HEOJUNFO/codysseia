@@ -1,6 +1,6 @@
 "use client";
 
-// 장면 영역: 섬 장면(children) + 섬 지도·군도 지도 겹쳐 보기 (대전제 8.7).
+// 장면 영역: 섬 장면(children) + 섬 지도·군도 지도 겹쳐 보기 (대전제 8.7) + 섬 간 항해 연출 (8.6).
 // 지도는 연 자리에서만 보인다. 이동해서 지역이 바뀌면 저절로 닫힌다.
 
 import Link from "next/link";
@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useGameState } from "@/lib/play/provider";
 import { ArchipelagoMap } from "./archipelago-map";
 import { IslandMap } from "./island-map";
+import { VoyageOverlay } from "./voyage-overlay";
 
 type Overlay = { kind: "island" | "archipelago"; at: string | undefined };
 
@@ -28,9 +29,10 @@ export function SceneArea({ children }: { children: React.ReactNode }) {
           {open === "island" ? <IslandMap /> : <ArchipelagoMap />}
         </div>
       ) : null}
+      <VoyageOverlay />
       <nav className="absolute left-3 top-3 z-20 flex gap-1.5">
         <Link href="/" className={button}>
-          섬 목록
+          메인
         </Link>
         <button className={`${button} ${open === "island" ? "ring-1 ring-white" : ""}`} onClick={() => toggle("island")}>
           섬 지도
