@@ -22,7 +22,7 @@
 
 - **엔진이 진실, GM은 서술자** (대전제 2.1). 주사위·수치·상태 변경은 엔진 코드와 GM 도구 호출로만 한다. 프롬프트나 서술로 수치를 정하지 않는다.
 - **섬은 데이터 패키지** (대전제 2.3). 섬 작업에서 `/engine`, `/gm`, `/schemas`, `/web`를 고치지 않는다. 필요하면 대전제 8.3 확장 절차로 이슈를 연다.
-- **섬 웹 페이지** (대전제 8.5 [제안]). 섬 전용 화면은 `islands/<섬_id>/web/`에만 만든다 (`/islands/<섬_id>` 경로). 화면만 담당하고 상태 변경은 엔진 API로만 한다. 섬 장면은 `@codysseia/play`(`useGameState`, `useSendAction`)만 import 한다. `web/app/islands/(generated)/`는 `web/scripts/sync-island-routes.mjs`가 생성하므로 직접 고치지 않는다.
+- **섬 웹 페이지** (대전제 8.5 [제안]). 섬 전용 화면은 `islands/<섬_id>/web/`에만 만든다 (`/islands/<섬_id>` 경로). 화면만 담당하고 상태 변경은 엔진 API로만 한다. 섬 장면은 `@codysseia/play`(`useGameState`, `useMove`, `useSendAction`)만 import 한다. `web/app/islands/(generated)/`는 `web/scripts/sync-island-routes.mjs`가 생성하므로 직접 고치지 않는다.
 - **남의 섬은 건드리지 않는다.** 요청받은 섬 폴더(`islands/<섬_id>/`) 밖은 읽기만 한다. 다른 섬은 공개 훅(`hooks.yaml`)에 있는 것만 참조한다.
 - **ID 접두사** (대전제 8.2). 모든 ID와 플래그는 `<섬_id>.` 으로 시작한다.
 - `docs/00_대전제.md`, `/schemas`, `/engine`, `/gm`, `/web` 변경은 PR + 전원 합의 대상이다. 에이전트가 임의로 [제안]을 [확정]으로 바꾸지 않는다.
@@ -35,7 +35,7 @@
 AGENTS.md / CLAUDE.md   에이전트 공통 지침 (이 파일)
 docs/                   대전제, 템플릿, 설계 문서, 참고 자료
 schemas/                데이터 JSON Schema
-engine/                 코어 엔진 (판정, 상태, 전투)
+engine/                 코어 엔진 (판정, 상태, 전투, 이동) — TypeScript, 테스트: npm test
 gm/                     게임 속 GM (프롬프트, 도구 연결, 공급자)
 web/                    웹 클라이언트 (Next.js App Router, npm 워크스페이스)
 islands/<섬_id>/        각자의 섬 (web/ 에 섬 전용 장면)
@@ -62,6 +62,22 @@ tools/                  개발 보조 도구 설정 (메모리 서버 등)
 - anthropics `skill-creator`는 Codex 내장 `skill-creator`와 이름이 겹치고 평가 스크립트가 `claude -p`에 의존해 Claude Code에만 둔다.
 - mattpocock 스킬의 이슈·스펙은 `.scratch/<작업>/` 마크다운으로 관리하고 커밋한다. 규칙: `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, 도메인 문서 규칙: `docs/agents/domain.md`.
 - GM용 스킬(예: 판정 규칙 조회, 섬 로더)을 만들면 개발용과 섞이지 않게 `gm/skills/`에 둔다.
+
+## gstack (권장)
+
+[gstack](https://github.com/garrytan/gstack)은 저장소에 넣지 않고 각자 전역으로 설치한다 (팀 모드, 세션 시작 때 자동 업데이트). 없어도 작업은 할 수 있다.
+
+```bash
+git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack
+cd ~/.claude/skills/gstack && ./setup --team      # Claude Code
+cd ~/.claude/skills/gstack && ./setup --host codex  # Codex도 쓰면
+```
+
+- 설치하면 /office-hours, /autoplan, /review, /qa, /ship, /investigate, /browse, /cso, /retro 등이 생긴다.
+- 웹 확인은 /browse를 쓴다 (Aside 브라우저 우선, 없으면 gstack 내장 브라우저).
+- gstack 파일 경로는 `~/.claude/skills/gstack/...` 기준이다.
+- 위 개발 에이전트 스킬과 역할이 겹치면(/review ↔ mp-code-review, /investigate ↔ diagnosing-bugs, /spec ↔ to-spec) 이슈·스펙 관리는 기존 규칙(`.scratch/`)을 따른다.
+- `--host codex`는 `~/.codex/skills/`에 `gstack-` 접두사로 설치된다 (예: `gstack-review`). 게임 속 GM Codex가 같은 `CODEX_HOME`을 쓰면 이 개발용 스킬이 GM 컨텍스트에 섞인다. 그래서 GM은 전용 `CODEX_HOME`(`~/.tragic_trpg/gm-codex`)을 쓴다 (대전제 2.4).
 
 ## 처음 한 번 할 일
 
