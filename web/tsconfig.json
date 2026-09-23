@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@codysseia/play": [
+        "./lib/play/index.ts"
       ]
     }
   },

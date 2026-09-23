@@ -22,7 +22,7 @@
 
 - **엔진이 진실, GM은 서술자** (대전제 2.1). 주사위·수치·상태 변경은 엔진 코드와 GM 도구 호출로만 한다. 프롬프트나 서술로 수치를 정하지 않는다.
 - **섬은 데이터 패키지** (대전제 2.3). 섬 작업에서 `/engine`, `/gm`, `/schemas`, `/web`를 고치지 않는다. 필요하면 대전제 8.3 확장 절차로 이슈를 연다.
-- **섬 웹 페이지** (대전제 8.5 [제안]). 섬 전용 화면은 `islands/<섬_id>/web/`에만 만든다 (`/islands/<섬_id>` 경로). 화면만 담당하고 상태 변경은 엔진 API로만 한다. `web/app/islands/`는 `web/scripts/sync-island-routes.mjs`가 생성하므로 직접 고치지 않는다.
+- **섬 웹 페이지** (대전제 8.5 [제안]). 섬 전용 화면은 `islands/<섬_id>/web/`에만 만든다 (`/islands/<섬_id>` 경로). 화면만 담당하고 상태 변경은 엔진 API로만 한다. 섬 장면은 `@codysseia/play`(`useGameState`, `useSendAction`)만 import 한다. `web/app/islands/(generated)/`는 `web/scripts/sync-island-routes.mjs`가 생성하므로 직접 고치지 않는다.
 - **남의 섬은 건드리지 않는다.** 요청받은 섬 폴더(`islands/<섬_id>/`) 밖은 읽기만 한다. 다른 섬은 공개 훅(`hooks.yaml`)에 있는 것만 참조한다.
 - **ID 접두사** (대전제 8.2). 모든 ID와 플래그는 `<섬_id>.` 으로 시작한다.
 - `docs/00_대전제.md`, `/schemas`, `/engine`, `/gm`, `/web` 변경은 PR + 전원 합의 대상이다. 에이전트가 임의로 [제안]을 [확정]으로 바꾸지 않는다.

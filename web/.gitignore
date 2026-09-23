@@ -41,5 +41,5 @@ yarn-error.log*
 next-env.d.ts
 
 # 섬 라우트 연결 파일 (scripts/sync-island-routes.mjs 가 생성)
-/app/islands/
+/app/islands/(generated)/
 /lib/islands.generated.ts
