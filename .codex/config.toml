@@ -1,0 +1,10 @@
+# 프로젝트 공용 Codex 설정 (codex 0.149 기준)
+# 이 파일은 저장소를 "신뢰된 프로젝트"로 등록해야 적용된다. 각자 한 번:
+#   ~/.codex/config.toml 에  [projects."<이 저장소 절대경로>"]  trust_level = "trusted"
+# (또는 저장소에서 codex 를 처음 켤 때 신뢰 여부 질문에 yes)
+
+# 에이전트 장기 메모리 — ./tools/hindsight/run.sh 로 서버를 먼저 띄운다.
+# 은행(bank)은 서로 완전히 격리된다. 플레이테스트 캠페인 기록은 이 은행에 쌓는다.
+[mcp_servers.hindsight]
+url = "http://localhost:8888/mcp/tragic-trpg-playtest/"
+
