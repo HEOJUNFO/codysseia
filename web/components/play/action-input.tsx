@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useGameState, useSendAction } from "@/lib/play";
+import { useGameState, useSendAction } from "@/lib/play/provider";
 
 export function ActionInput() {
   const [text, setText] = useState("");

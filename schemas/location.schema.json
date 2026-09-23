@@ -1,0 +1,138 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://codysseia/schemas/location.schema.json",
+  "title": "지역 (islands/<섬_id>/locations/*.yaml)",
+  "type": "object",
+  "required": [
+    "id",
+    "name"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/definitions/locationId"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "map_position": {
+      "$ref": "#/definitions/point",
+      "description": "섬 지도(map_image) 위 이 지역의 위치."
+    },
+    "image": {
+      "$ref": "#/definitions/asset",
+      "description": "현장 뷰 배경 이미지."
+    },
+    "spots": {
+      "type": "array",
+      "description": "지역 안의 이름 붙은 지점. 캐릭터는 지점 단위로 따로 움직일 수 있다.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*\\.spot\\.[a-z0-9_]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/definitions/point",
+            "description": "현장 뷰(image) 위 이 지점의 위치."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "connections": {
+      "type": "array",
+      "description": "이 지역에서 갈 수 있는 같은 섬의 지역. 한쪽에만 적으면 일방통행.",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/definitions/locationId"
+          },
+          {
+            "type": "object",
+            "required": [
+              "to"
+            ],
+            "properties": {
+              "to": {
+                "$ref": "#/definitions/locationId"
+              },
+              "requires_flags": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/flagId"
+                },
+                "description": "모두 켜져 있어야 지나갈 수 있다. 아니면 '잠김'으로 보인다."
+              },
+              "hidden_until_flags": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/flagId"
+                },
+                "description": "모두 켜지기 전에는 연결이 보이지도 않는다 (숨은 통로)."
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "definitions": {
+    "locationId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.loc\\.[a-z0-9_]+$"
+    },
+    "flagId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.flag\\.[a-z0-9_]+$"
+    },
+    "point": {
+      "type": "object",
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "additionalProperties": false,
+      "description": "지도 위 위치. 이미지 왼쪽 위가 (0,0), 오른쪽 아래가 (100,100)인 퍼센트 좌표."
+    },
+    "asset": {
+      "type": "string",
+      "pattern": "^assets/(?!.*\\.\\.)[A-Za-z0-9_./-]+$",
+      "description": "섬 폴더 기준 경로. assets/ 아래 파일만."
+    }
+  }
+}

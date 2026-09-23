@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useGameState } from "@/lib/play";
+import { useGameState } from "@/lib/play/provider";
 
 const ROLE_STYLE = {
   gm: "text-zinc-900 dark:text-zinc-100",

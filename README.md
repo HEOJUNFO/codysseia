@@ -17,4 +17,5 @@ GM은 호스트의 Codex가 맡는다.
 ```sh
 npm install
 npm run dev   # http://localhost:3000, 섬 페이지는 /islands/<섬_id>
+npm test      # 엔진 테스트 (Node 22.18 이상)
 ```

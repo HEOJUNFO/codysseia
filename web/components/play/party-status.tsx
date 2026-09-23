@@ -1,6 +1,6 @@
 "use client";
 
-import { useGameState } from "@/lib/play";
+import { useGameState } from "@/lib/play/provider";
 
 function Meter({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
@@ -20,7 +20,8 @@ function Meter({ label, value, max, color }: { label: string; value: number; max
 }
 
 export function PartyStatus() {
-  const { party, inventory } = useGameState();
+  const { party, inventory, moves } = useGameState();
+  const spotName = (id: string | null) => moves.spots.find((s) => s.id === id)?.name;
   return (
     <div className="space-y-4 p-3">
       <section>
@@ -28,7 +29,10 @@ export function PartyStatus() {
         <ul className="mt-2 space-y-3">
           {party.map((c) => (
             <li key={c.id}>
-              <div className="text-sm font-medium">{c.name}</div>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-medium">{c.name}</span>
+                {spotName(c.spotId) ? <span className="truncate text-xs text-zinc-500">{spotName(c.spotId)}</span> : null}
+              </div>
               <div className="mt-1 space-y-1">
                 <Meter label="HP" value={c.hp} max={c.maxHp} color="bg-rose-500" />
                 <Meter label="정신력" value={c.mind} max={c.maxMind} color="bg-indigo-500" />

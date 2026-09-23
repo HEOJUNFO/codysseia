@@ -29,7 +29,8 @@
       "@codysseia/play": [
         "./lib/play/index.ts"
       ]
-    }
+    },
+    "allowImportingTsExtensions": true
   },
   "include": [
     "next-env.d.ts",

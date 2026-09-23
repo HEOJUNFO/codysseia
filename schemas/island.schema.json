@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://codysseia/schemas/island.schema.json",
+  "title": "섬 (islands/<섬_id>/island.yaml)",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "entry_location",
+    "archipelago_position"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "섬 ID. 폴더 이름과 같아야 한다."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "author": {
+      "type": "string"
+    },
+    "concept": {
+      "type": "string"
+    },
+    "tone": {
+      "type": "string"
+    },
+    "recommended_level": {
+      "type": [
+        "string",
+        "integer"
+      ]
+    },
+    "expected_sessions": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "safe_zones": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/locationId"
+      }
+    },
+    "entry_location": {
+      "$ref": "#/definitions/locationId",
+      "description": "다른 섬에서 이 섬으로 오면 도착하는 지역."
+    },
+    "departure_locations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/locationId"
+      },
+      "description": "이 섬을 떠날 수 있는 지역(항구, 포털 등). 없으면 entry_location 에서만 떠날 수 있다."
+    },
+    "entry_requires_flags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/flagId"
+      },
+      "description": "이 섬에 들어오려면 모두 켜져 있어야 하는 플래그. 다른 섬 플래그는 그 섬 hooks.yaml 에 공개된 것만."
+    },
+    "archipelago_position": {
+      "$ref": "#/definitions/point",
+      "description": "군도 지도에서 이 섬의 위치. 제작자가 고른다. 다른 섬과 너무 가까우면 경고가 나온다."
+    },
+    "map_image": {
+      "$ref": "#/definitions/asset",
+      "description": "섬 지도 배경 이미지."
+    }
+  },
+  "definitions": {
+    "locationId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.loc\\.[a-z0-9_]+$"
+    },
+    "flagId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.flag\\.[a-z0-9_]+$"
+    },
+    "point": {
+      "type": "object",
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "additionalProperties": false,
+      "description": "지도 위 위치. 이미지 왼쪽 위가 (0,0), 오른쪽 아래가 (100,100)인 퍼센트 좌표."
+    },
+    "asset": {
+      "type": "string",
+      "pattern": "^assets/(?!.*\\.\\.)[A-Za-z0-9_./-]+$",
+      "description": "섬 폴더 기준 경로. assets/ 아래 파일만."
+    }
+  }
+}

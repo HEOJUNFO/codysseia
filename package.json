@@ -2,11 +2,17 @@
   "name": "codysseia",
   "private": true,
   "workspaces": [
+    "engine",
     "web"
   ],
   "scripts": {
     "dev": "npm run dev -w web",
     "build": "npm run build -w web",
-    "lint": "npm run lint -w web"
+    "lint": "npm run lint -w web",
+    "test": "npm test -w engine",
+    "typecheck": "npm run typecheck -w engine"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }

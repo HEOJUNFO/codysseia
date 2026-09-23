@@ -4,9 +4,10 @@
 // 이 스크립트는 그 안에 들어갈 섬별 장면 페이지만 web/app/islands/(generated)/ 에 만든다.
 //   islands/ash_harbor/web/page.tsx         → /islands/ash_harbor
 //   islands/ash_harbor/web/map/page.tsx     → /islands/ash_harbor/map
+//   islands/ash_harbor/assets/map.png       → /islands/ash_harbor/assets/map.png
 //
 // 플레이 조건(PLAY_REQUIREMENTS)을 모두 채운 섬만 라우트를 만든다 (대전제 8.5).
-// 못 채운 섬은 목록에 '준비 중'으로만 나오고 /islands/<섬_id> 는 404 다.
+// 못 채운 섬은 목록에 '준비 중'과 문제 목록으로만 나오고 /islands/<섬_id> 는 404 다.
 //
 // 연결 파일은 원본을 re-export 하는 한 줄짜리라 원본 편집은 바로 핫 리로드된다.
 // 섬이나 라우트 파일을 새로 만들거나 지웠을 때만 다시 실행한다 (npm run sync:islands).
@@ -16,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { archipelagoWarnings, loadIsland } from "../../engine/src/index.ts";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoDir = path.resolve(webDir, "..");
@@ -31,19 +33,25 @@ const ISLAND_ID = /^[a-z][a-z0-9_]*$/;
 
 const HEADER = "// 자동 생성 — 직접 고치지 않는다. (web/scripts/sync-island-routes.mjs)";
 
-// 플레이 가능한 섬의 조건. 파일이 있는지만 본다 (내용 검증은 /schemas 가 생기면 추가).
-const PLAY_REQUIREMENTS = [
-  { label: "island.yaml", ok: (dir) => fs.existsSync(path.join(dir, "island.yaml")) },
-  { label: "gm.md", ok: (dir) => fs.existsSync(path.join(dir, "gm.md")) },
-  {
-    label: "locations/*.yaml",
-    ok: (dir) => {
-      const locDir = path.join(dir, "locations");
-      return fs.existsSync(locDir) && fs.readdirSync(locDir).some((f) => /\.ya?ml$/.test(f));
-    },
-  },
-  { label: "web/page.tsx", ok: (dir) => EXTENSIONS.some((ext) => fs.existsSync(path.join(dir, "web", `page${ext}`))) },
-];
+// 플레이 가능한 섬의 조건 (대전제 8.5). 문제 목록이 비어 있어야 플레이할 수 있다.
+// island.yaml·locations/ 는 엔진이 스키마와 참조까지 검증한다.
+function checkIsland(dir) {
+  const problems = [];
+  if (!fs.existsSync(path.join(dir, "gm.md"))) problems.push("gm.md 없음");
+  if (!EXTENSIONS.some((ext) => fs.existsSync(path.join(dir, "web", `page${ext}`)))) problems.push("web/page.tsx 없음");
+  const loaded = loadIsland(dir);
+  problems.push(...loaded.errors);
+  return { problems, island: loaded.island };
+}
+
+function writeAssetRoute(islandId) {
+  const target = path.join(outDir, islandId, "assets", "[...path]", "route.ts");
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(
+    target,
+    [HEADER, `import { islandAssetHandler } from "@/lib/island-assets";`, "", `export const GET = islandAssetHandler(${JSON.stringify(islandId)});`, ""].join("\n"),
+  );
+}
 
 function posix(p) {
   return p.split(path.sep).join("/");
@@ -104,6 +112,7 @@ function sync() {
   fs.mkdirSync(outDir, { recursive: true });
 
   const islands = [];
+  const loadedIslands = [];
   const skipped = [];
   const entries = fs.existsSync(islandsDir) ? fs.readdirSync(islandsDir, { withFileTypes: true }) : [];
 
@@ -116,14 +125,19 @@ function sync() {
 
     const id = entry.name;
     const islandDir = path.join(islandsDir, id);
-    const missing = PLAY_REQUIREMENTS.filter((r) => !r.ok(islandDir)).map((r) => r.label);
-    const playable = missing.length === 0;
+    const { problems, island } = checkIsland(islandDir);
+    const playable = problems.length === 0;
     if (playable) {
       const webRoot = path.join(islandDir, "web");
       for (const file of findRouteFiles(webRoot)) writeStub(id, webRoot, file);
+      if (fs.existsSync(path.join(islandDir, "assets"))) writeAssetRoute(id);
+      loadedIslands.push(island);
     }
-    islands.push({ id, name: readIslandName(islandDir, id), playable, missing });
+    islands.push({ id, name: readIslandName(islandDir, id), playable, problems, warnings: [] });
   }
+
+  const warnings = archipelagoWarnings(loadedIslands);
+  for (const entry of islands) entry.warnings = warnings[entry.id] ?? [];
 
   islands.sort((a, b) => a.id.localeCompare(b.id));
   fs.mkdirSync(path.dirname(manifestFile), { recursive: true });
@@ -131,7 +145,7 @@ function sync() {
     manifestFile,
     [
       HEADER,
-      "export type IslandEntry = { id: string; name: string; playable: boolean; missing: string[] };",
+      "export type IslandEntry = { id: string; name: string; playable: boolean; problems: string[]; warnings: string[] };",
       `export const islands: readonly IslandEntry[] = ${JSON.stringify(islands, null, 2)};`,
       "",
     ].join("\n"),
@@ -140,7 +154,10 @@ function sync() {
   const playable = islands.filter((i) => i.playable).map((i) => i.id);
   console.log(`[sync-island-routes] 플레이 가능 ${playable.length}개: ${playable.join(", ") || "(없음)"}`);
   for (const i of islands.filter((i) => !i.playable)) {
-    console.log(`[sync-island-routes] 준비 중 ${i.id} — 없음: ${i.missing.join(", ")}`);
+    console.log(`[sync-island-routes] 준비 중 ${i.id}:\n  - ${i.problems.join("\n  - ")}`);
+  }
+  for (const i of islands.filter((i) => i.warnings.length > 0)) {
+    console.warn(`[sync-island-routes] 경고 ${i.id}:\n  - ${i.warnings.join("\n  - ")}`);
   }
   if (skipped.length > 0) {
     console.warn(`[sync-island-routes] snake_case 가 아닌 폴더는 건너뜀: ${skipped.join(", ")}`);
