@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { islands } from "@/lib/islands.generated";
 import { entry, initialMockState, mockGmReply } from "./mock";
 import type { GameState } from "./types";
 
@@ -48,6 +49,10 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
     if (!text) return;
 
     const move = /^\/move\s+([a-z][a-z0-9_]*)$/.exec(text);
+    if (move && !islands.some((i) => i.id === move[1] && i.playable)) {
+      setState((s) => ({ ...s, log: [...s.log, entry("system", `move_party 거부 — ${move[1]}은(는) 플레이할 수 없는 섬`)] }));
+      return;
+    }
     if (move) {
       setState((s) => ({
         ...s,

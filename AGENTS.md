@@ -38,7 +38,7 @@ schemas/                데이터 JSON Schema
 engine/                 코어 엔진 (판정, 상태, 전투)
 gm/                     게임 속 GM (프롬프트, 도구 연결, 공급자)
 web/                    웹 클라이언트 (Next.js App Router, npm 워크스페이스)
-islands/<섬_id>/        각자의 섬 (선택: web/ 에 섬 전용 페이지)
+islands/<섬_id>/        각자의 섬 (web/ 에 섬 전용 장면)
 tools/                  개발 보조 도구 설정 (메모리 서버 등)
 .agents/skills/         개발 에이전트 스킬 (Codex가 읽는 원본)
 .claude/skills/         Claude Code용 — .agents/skills 로의 심볼릭 링크 + Claude 전용 스킬

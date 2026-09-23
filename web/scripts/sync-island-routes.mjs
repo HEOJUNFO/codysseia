@@ -4,7 +4,9 @@
 // 이 스크립트는 그 안에 들어갈 섬별 장면 페이지만 web/app/islands/(generated)/ 에 만든다.
 //   islands/ash_harbor/web/page.tsx         → /islands/ash_harbor
 //   islands/ash_harbor/web/map/page.tsx     → /islands/ash_harbor/map
-//   web/page.tsx 가 없는 섬                  → 코어 기본 장면
+//
+// 플레이 조건(PLAY_REQUIREMENTS)을 모두 채운 섬만 라우트를 만든다 (대전제 8.5).
+// 못 채운 섬은 목록에 '준비 중'으로만 나오고 /islands/<섬_id> 는 404 다.
 //
 // 연결 파일은 원본을 re-export 하는 한 줄짜리라 원본 편집은 바로 핫 리로드된다.
 // 섬이나 라우트 파일을 새로 만들거나 지웠을 때만 다시 실행한다 (npm run sync:islands).
@@ -28,6 +30,20 @@ const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js"];
 const ISLAND_ID = /^[a-z][a-z0-9_]*$/;
 
 const HEADER = "// 자동 생성 — 직접 고치지 않는다. (web/scripts/sync-island-routes.mjs)";
+
+// 플레이 가능한 섬의 조건. 파일이 있는지만 본다 (내용 검증은 /schemas 가 생기면 추가).
+const PLAY_REQUIREMENTS = [
+  { label: "island.yaml", ok: (dir) => fs.existsSync(path.join(dir, "island.yaml")) },
+  { label: "gm.md", ok: (dir) => fs.existsSync(path.join(dir, "gm.md")) },
+  {
+    label: "locations/*.yaml",
+    ok: (dir) => {
+      const locDir = path.join(dir, "locations");
+      return fs.existsSync(locDir) && fs.readdirSync(locDir).some((f) => /\.ya?ml$/.test(f));
+    },
+  },
+  { label: "web/page.tsx", ok: (dir) => EXTENSIONS.some((ext) => fs.existsSync(path.join(dir, "web", `page${ext}`))) },
+];
 
 function posix(p) {
   return p.split(path.sep).join("/");
@@ -83,25 +99,6 @@ function writeStub(islandId, webRoot, source) {
   fs.writeFileSync(target, lines.join("\n"));
 }
 
-function writeDefaultScene(islandId, name) {
-  const target = path.join(outDir, islandId, "page.tsx");
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(
-    target,
-    [
-      HEADER,
-      `import { DefaultScene } from "@/components/play/default-scene";`,
-      "",
-      `export const metadata = { title: ${JSON.stringify(name)} };`,
-      "",
-      "export default function Page() {",
-      `  return <DefaultScene name={${JSON.stringify(name)}} />;`,
-      "}",
-      "",
-    ].join("\n"),
-  );
-}
-
 function sync() {
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
@@ -112,23 +109,20 @@ function sync() {
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const islandDir = path.join(islandsDir, entry.name);
-    const webRoot = path.join(islandDir, "web");
-    const hasWeb = fs.existsSync(webRoot);
-    if (!hasWeb && !fs.existsSync(path.join(islandDir, "island.yaml"))) continue;
     if (!ISLAND_ID.test(entry.name)) {
       skipped.push(entry.name);
       continue;
     }
 
     const id = entry.name;
-    const name = readIslandName(islandDir, id);
-    const files = hasWeb ? findRouteFiles(webRoot) : [];
-    for (const file of files) writeStub(id, webRoot, file);
-
-    const hasScene = files.some((f) => path.dirname(f) === webRoot && path.parse(f).name === "page");
-    if (!hasScene) writeDefaultScene(id, name);
-    islands.push({ id, name, hasScene });
+    const islandDir = path.join(islandsDir, id);
+    const missing = PLAY_REQUIREMENTS.filter((r) => !r.ok(islandDir)).map((r) => r.label);
+    const playable = missing.length === 0;
+    if (playable) {
+      const webRoot = path.join(islandDir, "web");
+      for (const file of findRouteFiles(webRoot)) writeStub(id, webRoot, file);
+    }
+    islands.push({ id, name: readIslandName(islandDir, id), playable, missing });
   }
 
   islands.sort((a, b) => a.id.localeCompare(b.id));
@@ -137,14 +131,17 @@ function sync() {
     manifestFile,
     [
       HEADER,
-      "export type IslandEntry = { id: string; name: string; hasScene: boolean };",
+      "export type IslandEntry = { id: string; name: string; playable: boolean; missing: string[] };",
       `export const islands: readonly IslandEntry[] = ${JSON.stringify(islands, null, 2)};`,
       "",
     ].join("\n"),
   );
 
-  const summary = islands.map((i) => `${i.id}${i.hasScene ? "" : "(기본 장면)"}`).join(", ");
-  console.log(`[sync-island-routes] 섬 ${islands.length}개: ${summary || "(없음)"}`);
+  const playable = islands.filter((i) => i.playable).map((i) => i.id);
+  console.log(`[sync-island-routes] 플레이 가능 ${playable.length}개: ${playable.join(", ") || "(없음)"}`);
+  for (const i of islands.filter((i) => !i.playable)) {
+    console.log(`[sync-island-routes] 준비 중 ${i.id} — 없음: ${i.missing.join(", ")}`);
+  }
   if (skipped.length > 0) {
     console.warn(`[sync-island-routes] snake_case 가 아닌 폴더는 건너뜀: ${skipped.join(", ")}`);
   }
