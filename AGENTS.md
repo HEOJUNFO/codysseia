@@ -53,6 +53,11 @@ tools/                  개발 보조 도구 설정 (메모리 서버 등)
 | mattpocock/skills | ask-matt, grill-me, grilling, grill-with-docs, domain-modeling, to-spec, to-tickets, implement, triage, wayfinder, tdd, diagnosing-bugs, research, prototype, codebase-design, improve-codebase-architecture, mp-code-review, resolving-merge-conflicts, handoff, teach, wait-what, to-questionnaire, writing-for-agents, wizard, setup-matt-pocock-skills | 어떤 스킬을 쓸지 모르겠으면 `ask-matt` |
 | obra/superpowers | verification-before-completion, receiving-code-review | mattpocock 세트와 겹치지 않는 것만 |
 | anthropics/skills | mcp-builder (공용), skill-creator (`.claude/skills`만) | GM 도구 MCP 서버 제작, 스킬 작성 |
+| anthropics/skills | algorithmic-art, canvas-design, frontend-design, theme-factory | 섬 제작: 절차적 배경·지도풍 이미지(`assets/`), 장면 페이지 디자인과 톤 |
+| nextlevelbuilder/ui-ux-pro-max-skill | ui-ux-pro-max | 섬 제작: 장면 페이지 스타일·팔레트·폰트 |
+| tt-a1i/archify | archify | 섬 제작: 지역 연결·이벤트 분기·플래그 흐름 다이어그램 |
+| blader/humanizer | humanizer | 섬 제작: 로어·대사에서 AI 티 지우기 (규칙은 영어 기준) |
+| heygen-com/hyperframes | hyperframes, hyperframes-{animation,audio,cli,core,creative,keyframes,registry,studio}, media-use | 섬 제작: 섬 소개 영상, 효과음·배경음 찾기와 생성. 진입점은 `hyperframes` |
 | Graphify-Labs/graphify | graphify | 아래 "지식그래프" 참고 |
 
 스킬 관리 규칙:
@@ -61,6 +66,8 @@ tools/                  개발 보조 도구 설정 (메모리 서버 등)
 - superpowers의 `using-superpowers`, `brainstorming` 등은 설치하지 않는다. 모든 응답 전에 스킬 사용을 강제해 mattpocock 흐름과 충돌한다.
 - anthropics `skill-creator`는 Codex 내장 `skill-creator`와 이름이 겹치고 평가 스크립트가 `claude -p`에 의존해 Claude Code에만 둔다.
 - mattpocock 스킬의 이슈·스펙은 `.scratch/<작업>/` 마크다운으로 관리하고 커밋한다. 규칙: `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, 도메인 문서 규칙: `docs/agents/domain.md`.
+- hyperframes는 핵심 스킬만 설치해 두었다. 작업 흐름 스킬(motion-graphics, general-video 등)은 쓸 때 `npx hyperframes skills update <이름>`으로 추가된다. 계속 쓸 것이면 추가된 폴더와 `skills-lock.json`을 커밋하고, 이름이 겹치는 `figma` 스킬은 설치하지 않는다 (Figma 플러그인 스킬과 충돌).
+- 섬 제작용 스킬이 만든 이미지·소리는 해당 섬의 `assets/`에만 둔다. 스킬 자체는 섬 폴더에 복사하지 않는다.
 - GM용 스킬(예: 판정 규칙 조회, 섬 로더)을 만들면 개발용과 섞이지 않게 `gm/skills/`에 둔다.
 
 ## gstack (권장)
