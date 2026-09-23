@@ -11,3 +11,10 @@ GM은 호스트의 Codex가 맡는다.
 - 섬 만들기: [`docs/01_섬_제작_템플릿.md`](docs/01_섬_제작_템플릿.md)
 - 개발 환경과 에이전트 지침: [`AGENTS.md`](AGENTS.md)
 - 참고 저장소: [`docs/references.md`](docs/references.md)
+
+## 웹 실행
+
+```sh
+npm install
+npm run dev   # http://localhost:3000, 섬 페이지는 /islands/<섬_id>
+```
