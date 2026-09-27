@@ -8,4 +8,4 @@ export { formatHours } from "./time";
 export { ArchipelagoMap } from "@/components/play/archipelago-map";
 export { IslandMap } from "@/components/play/island-map";
 export { LocationView } from "@/components/play/location-view";
-export type { ArchipelagoIsland, Character, GameState, IslandMapData, Item, LocationViewData, LogEntry, Moves, Place, Point, Voyage } from "./types";
+export type { ArchipelagoIsland, Character, GameState, IslandMapData, IslandPatch, IslandState, Item, JsonObject, JsonValue, LocationViewData, LogEntry, Moves, Place, Point, Voyage } from "./types";

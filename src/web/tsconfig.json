@@ -40,7 +40,9 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts",
     "../islands/*/web/**/*.ts",
-    "../islands/*/web/**/*.tsx"
+    "../islands/*/web/**/*.tsx",
+    "../game/**/*.ts",
+    "../protocol/**/*.ts"
   ],
   "exclude": [
     "node_modules"

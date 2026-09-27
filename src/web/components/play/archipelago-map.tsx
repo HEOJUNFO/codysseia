@@ -3,13 +3,14 @@
 // 군도 지도 (코어 소유, 대전제 8.7). 섬 위치는 각 섬의 archipelago_position.
 // 출발 지역에 있을 때만 다른 섬을 눌러 건너갈 수 있다. 항해 시간은 거리에 비례한다 (8.6).
 
-import { useGameState, useMove } from "@/lib/play/provider";
+import { useGameState, useMove, usePlayIdentity } from "@/lib/play/provider";
 import { formatHours } from "@/lib/play/time";
 import { MapStage, Marker, type MarkerTone } from "./map-stage";
 
 export function ArchipelagoMap() {
   const { archipelago, moves, pending } = useGameState();
   const move = useMove();
+  const canLead = usePlayIdentity().role === "host";
   const travel = new Map(moves.islands.map((i) => [i.id, i.locked]));
   const hours = new Map(moves.islands.map((i) => [i.id, i.hours]));
 
@@ -20,8 +21,8 @@ export function ArchipelagoMap() {
   };
 
   return (
-    <div className="relative h-full w-full">
-      <MapStage image={null} fallbackClassName="fill-sky-950" label="군도 지도">
+    <div className="relative h-full w-full bg-[url('/lobby/archipelago-harbor.png')] bg-cover bg-center">
+      <MapStage image={null} fallbackClassName="fill-transparent" label="군도 지도">
         {(stage) =>
           archipelago.map((i) => (
             <Marker
@@ -30,7 +31,7 @@ export function ArchipelagoMap() {
               point={i.position}
               label={hours.has(i.id) ? `${i.name} · ${formatHours(hours.get(i.id)!)}` : i.name}
               tone={tone(i.id, i.current)}
-              onSelect={!pending && travel.get(i.id) === false ? () => move.toIsland(i.id) : undefined}
+              onSelect={canLead && !pending && travel.get(i.id) === false ? () => move.toIsland(i.id) : undefined}
             />
           ))
         }

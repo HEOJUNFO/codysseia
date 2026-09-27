@@ -2,11 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { useGameState } from "@/lib/play/provider";
+import styles from "./play-ui.module.css";
 
 const ROLE_STYLE = {
-  gm: "text-zinc-900 dark:text-zinc-100",
-  player: "text-sky-700 dark:text-sky-300",
-  system: "text-xs text-zinc-500",
+  gm: styles.gm,
+  player: styles.player,
+  system: styles.system,
 } as const;
 
 export function GMLog() {
@@ -18,14 +19,14 @@ export function GMLog() {
   }, [log.length, pending]);
 
   return (
-    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3 text-sm leading-relaxed" aria-live="polite">
+    <div className={styles.log} aria-live="polite">
       {log.map((e) => (
         <p key={e.id} className={ROLE_STYLE[e.role]}>
           {e.role === "player" ? <span className="mr-1 select-none">›</span> : null}
           {e.text}
         </p>
       ))}
-      {pending ? <p className="text-zinc-400">GM이 생각하는 중…</p> : null}
+      {pending ? <p className={styles.system}>GM이 생각하는 중…</p> : null}
       <div ref={end} />
     </div>
   );

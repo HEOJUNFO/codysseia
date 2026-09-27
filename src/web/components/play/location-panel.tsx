@@ -1,16 +1,14 @@
 "use client";
 
-import { useGameState, useMove } from "@/lib/play/provider";
+import { useGameState, useMove, usePlayIdentity } from "@/lib/play/provider";
 import { formatHours } from "@/lib/play/time";
-
-const chip =
-  "rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-800";
+import styles from "./play-ui.module.css";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</h2>
-      <div className="mt-2 flex flex-wrap gap-1.5">{children}</div>
+    <section className={styles.moveSection}>
+      <h3 className={styles.sectionTitle}>{title}</h3>
+      <div className={styles.chipList}>{children}</div>
     </section>
   );
 }
@@ -18,21 +16,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function LocationPanel() {
   const { place, moves, pending, inCombat, time } = useGameState();
   const move = useMove();
-  if (!place) return <p className="p-3 text-sm text-zinc-500">플레이할 수 있는 섬이 없다.</p>;
+  const canLead = usePlayIdentity().role === "host";
+  if (!place) return <p>플레이할 수 있는 섬이 없다.</p>;
 
   return (
-    <div className="space-y-4 p-3">
-      <section>
-        <div className="text-xs text-zinc-500">{place.islandName}</div>
-        <div className="text-base font-semibold">{place.locationName}</div>
-        <div className="mt-1 text-xs text-zinc-500">게임 시간 {time > 0 ? `${formatHours(time)} 경과` : "시작"}</div>
-        {inCombat ? <div className="mt-1 text-xs text-rose-500">전투 중 — 지점 이동만 가능</div> : null}
+    <div className={styles.sidebarSection}>
+      <section className={styles.placeHeader}>
+        <small>{place.islandName}</small>
+        <h2>{place.locationName}</h2>
+        <p>게임 시간 {time > 0 ? `${formatHours(time)} 경과` : "시작"}</p>
+        {inCombat ? <p className={styles.combat}>전투 중 — 지점 이동만 가능</p> : null}
       </section>
 
       {moves.spots.length > 0 ? (
         <Section title="지점">
           {moves.spots.map((s) => (
-            <button key={s.id} className={chip} disabled={pending} onClick={() => move.toSpot(s.id)}>
+            <button key={s.id} className={styles.chip} disabled={pending} onClick={() => move.toSpot(s.id)}>
               {s.name}
             </button>
           ))}
@@ -44,9 +43,9 @@ export function LocationPanel() {
           {moves.locations.map((l) => (
             <button
               key={l.id}
-              className={chip}
-              disabled={pending || l.locked}
-              title={l.locked ? "잠김" : undefined}
+              className={styles.chip}
+              disabled={pending || l.locked || !canLead}
+              title={!canLead ? "파티 이동은 호스트가 결정합니다." : l.locked ? "잠김" : undefined}
               onClick={() => move.toLocation(l.id)}
             >
               {l.name}
@@ -61,9 +60,9 @@ export function LocationPanel() {
           {moves.islands.map((i) => (
             <button
               key={i.id}
-              className={chip}
-              disabled={pending || i.locked}
-              title={i.locked ? "아직 들어갈 수 없다" : `항해 ${formatHours(i.hours)}`}
+              className={styles.chip}
+              disabled={pending || i.locked || !canLead}
+              title={!canLead ? "항해는 호스트가 결정합니다." : i.locked ? "아직 들어갈 수 없다" : `항해 ${formatHours(i.hours)}`}
               onClick={() => move.toIsland(i.id)}
             >
               {i.name} · {formatHours(i.hours)}

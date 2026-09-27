@@ -1,16 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, useTransition } from "react";
-import { moveAction, sendActionAction } from "./actions";
-import type { GameState, MoveRequest } from "./types";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { RevisionStream } from "@/lib/revision-stream";
+import { applyIslandPatch } from "../../../protocol/island-state";
+import type { GameChange, GameCommand, GameResumeMessage, GameSnapshotMessage, GameState, MoveRequest } from "./types";
 
 type Mover = {
-  /** 같은 섬의 연결된 지역으로 파티 이동 */
   toLocation: (locationId: string) => void;
-  /** 지역 안 지점으로 캐릭터 이동. characterIds 를 비우면 파티 전원 */
   toSpot: (spotId: string | null, characterIds?: string[]) => void;
-  /** 다른 섬으로 파티 이동 (출발 지역에서만) */
   toIsland: (islandId: string) => void;
 };
 
@@ -18,69 +17,239 @@ type PlayContextValue = {
   state: GameState;
   sendAction: (text: string) => void;
   move: Mover;
+  identity: { roomId: string; role: "host" | "player"; characterId: string };
+};
+
+type RoomStatus = {
+  isMember: boolean;
+  room: { id: string; phase: "waiting" | "playing" } | null;
+};
+
+type LobbySnapshot = {
+  type: "snapshot";
+  room: { id: string; phase: "waiting" | "playing" };
+  selfId: string;
+  members: { id: string; role: "host" | "player" }[];
 };
 
 const PlayContext = createContext<PlayContextValue | null>(null);
+// 명령 ID는 중복 적용 방지용이다. HTTP로 접속한 LAN 브라우저에서도 생성할 수 있어야 한다.
+const commandPrefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+let commandSequence = 0;
 
-function islandFromPath(pathname: string): string {
-  return pathname.split("/")[2] ?? "";
+function nextCommandId(): string {
+  return `${commandPrefix}-${(++commandSequence).toString(36)}`;
 }
 
-export function PlayProvider({ initial, children }: { initial: GameState; children: React.ReactNode }) {
+function applyChange(state: GameState, change: GameChange): GameState {
+  if (change.kind === "spot") {
+    return {
+      ...state,
+      party: state.party.map((character) => character.id === change.characterId ? { ...character, spotId: change.spotId } : character),
+    };
+  }
+  if (change.kind === "scene") {
+    const islandChanged = state.place?.islandId !== change.place.islandId;
+    return {
+      ...state,
+      party: state.party.map((character) => character.spotId === null ? character : { ...character, spotId: null }),
+      place: change.place,
+      moves: change.moves,
+      visited: change.visitedAdded.length ? [...state.visited, ...change.visitedAdded] : state.visited,
+      discovered: change.discoveredAdded.length ? [...state.discovered, ...change.discoveredAdded] : state.discovered,
+      archipelago: islandChanged ? state.archipelago.map((island) => ({ ...island, current: island.id === change.place.islandId })) : state.archipelago,
+      islandMap: change.islandMap,
+      locationView: change.locationView,
+      time: change.time ?? state.time,
+      voyage: change.voyage ?? state.voyage,
+      islandState: change.islandState ?? state.islandState,
+      log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log,
+    };
+  }
+  if (change.kind === "island_patch") {
+    let islandState = state.islandState;
+    for (const patch of change.patches) islandState = applyIslandPatch(islandState, patch);
+    return { ...state, islandState, log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log };
+  }
+  return { ...state, log: [...state.log, ...change.logEntries] };
+}
+
+export function PlayProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [snapshot, setSnapshot] = useState(initial);
-  const [pending, startTransition] = useTransition();
+  const [snapshot, setSnapshot] = useState<GameState | null>(null);
+  const [identity, setIdentity] = useState<PlayContextValue["identity"] | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [synchronizing, setSynchronizing] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [generation, setGeneration] = useState(0);
+  const socketRef = useRef<WebSocket | null>(null);
+  const snapshotRef = useRef<GameState | null>(null);
+  const roomRef = useRef<string | null>(null);
+  const lastRevision = useRef(0);
+  const pendingCommands = useRef(new Set<string>());
 
-  // 화면은 엔진 위치를 따라간다 (대전제 8.5). 주소창으로 다른 섬에 들어가도 파티가 있는 섬으로 돌아온다.
-  const islandId = snapshot.place?.islandId;
   useEffect(() => {
-    if (islandId && islandId !== islandFromPath(pathname)) router.replace(`/islands/${islandId}`);
-  }, [islandId, pathname, router]);
-
-  const run = useCallback((call: () => Promise<GameState>) => {
-    startTransition(async () => {
-      const next = await call();
-      setSnapshot(next);
-    });
-  }, []);
-
-  const value = useMemo<PlayContextValue>(() => {
-    const request = (req: MoveRequest) => run(() => moveAction(req));
-    return {
-      state: { ...snapshot, pending },
-      sendAction: (text) => {
-        if (text.trim()) run(() => sendActionAction(text));
+    const controller = new AbortController();
+    let socket: WebSocket | null = null;
+    let disposed = false;
+    const publish = (state: GameState) => { snapshotRef.current = state; setSnapshot(state); };
+    const stream = new RevisionStream<GameChange>(
+      (change) => change.revision,
+      (change) => {
+        const current = snapshotRef.current;
+        if (!current) { setError("게임 상태를 받지 못했습니다. 새 상태를 요청하세요."); return; }
+        publish(applyChange(current, change));
+        lastRevision.current = change.revision;
       },
-      move: {
-        toLocation: (locationId) => request({ kind: "location", locationId }),
-        toSpot: (spotId, characterIds) =>
-          request({ kind: "spot", spotId, characterIds: characterIds?.length ? characterIds : snapshot.party.map((c) => c.id) }),
-        toIsland: (islandId) => request({ kind: "island", islandId }),
+      (from, to) => {
+        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "game_replay", from, to }));
       },
+      () => setError("누락된 상태가 너무 많습니다. 새 상태를 요청하세요."),
+      lastRevision.current,
+    );
+
+    fetch("/api/lobby/local", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("방 정보를 불러오지 못했습니다.");
+        return response.json() as Promise<RoomStatus>;
+      })
+      .then((status) => {
+        if (disposed) return;
+        if (!status.room || !status.isMember) { router.replace("/rooms"); return; }
+        if (status.room.phase !== "playing") { router.replace(`/rooms/${status.room.id}`); return; }
+        const resumeRevision = roomRef.current === status.room.id && snapshotRef.current ? lastRevision.current : null;
+        if (roomRef.current !== status.room.id) {
+          roomRef.current = status.room.id;
+          snapshotRef.current = null;
+          setSnapshot(null);
+          lastRevision.current = 0;
+          stream.reset(0);
+        }
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const query = new URLSearchParams({ room: status.room.id });
+        if (resumeRevision !== null) query.set("revision", String(resumeRevision));
+        socket = new WebSocket(`${protocol}//${window.location.host}/ws/lobby?${query}`);
+        socketRef.current = socket;
+        socket.onopen = () => { if (!disposed) { setConnected(true); setError(""); } };
+        socket.onmessage = (event) => {
+          if (disposed) return;
+          let message: Record<string, unknown>;
+          try { message = JSON.parse(event.data); } catch { return; }
+          if (message.type === "snapshot") {
+            const lobby = message as LobbySnapshot;
+            if (lobby.room.phase !== "playing") { router.replace(`/rooms/${lobby.room.id}`); return; }
+            const member = lobby.members.find((entry) => entry.id === lobby.selfId);
+            if (member) setIdentity((current) => ({ roomId: lobby.room.id, role: member.role, characterId: current?.characterId ?? "" }));
+          } else if (message.type === "game_snapshot") {
+            const initial = message as GameSnapshotMessage;
+            lastRevision.current = initial.revision;
+            stream.reset(initial.revision);
+            setSynchronizing(false);
+            publish(initial.state);
+            setIdentity((current) => current ? { ...current, characterId: initial.selfCharacterId } : null);
+          } else if (message.type === "game_resumed") {
+            const resumed = message as GameResumeMessage;
+            setIdentity((current) => current ? { ...current, characterId: resumed.selfCharacterId } : null);
+            if (!snapshotRef.current) setError("이전 게임 상태가 없습니다. 새 상태를 요청하세요.");
+            else {
+              setSynchronizing(resumed.revision > lastRevision.current);
+              stream.catchUp(resumed.revision);
+            }
+          } else if (message.type === "game_changed") {
+            stream.accept(message as GameChange);
+            setSynchronizing(!stream.caughtUp);
+          } else if (message.type === "game_replay_error") {
+            setError("변경 이력을 복구하지 못했습니다. 새 상태를 요청하세요.");
+          } else if (message.type === "game_command_result") {
+            pendingCommands.current.delete(String(message.commandId));
+            setPending(pendingCommands.current.size > 0);
+            if (!message.ok) setError(String(message.error ?? "명령을 처리하지 못했습니다."));
+          } else if (message.type === "room_closed") {
+            router.replace("/rooms");
+          }
+        };
+        socket.onclose = () => {
+          if (socketRef.current === socket) socketRef.current = null;
+          if (disposed) return;
+          setConnected(false);
+          pendingCommands.current.clear();
+          setPending(false);
+          setError("연결이 끊겼습니다. 다시 연결하세요.");
+        };
+        socket.onerror = () => { if (!disposed) setError("게임 서버에 연결하지 못했습니다."); };
+      })
+      .catch((cause) => { if (!disposed && !controller.signal.aborted) setError(cause instanceof Error ? cause.message : "방에 연결하지 못했습니다."); });
+    return () => {
+      disposed = true;
+      controller.abort();
+      socket?.close();
+      if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [snapshot, pending, run]);
+  }, [generation, router]);
 
-  return <PlayContext.Provider value={value}>{children}</PlayContext.Provider>;
+  useEffect(() => {
+    const islandId = snapshot?.place?.islandId;
+    if (pathname.startsWith("/islands/") && islandId && pathname.split("/")[2] !== islandId) router.replace(`/islands/${islandId}`);
+  }, [pathname, router, snapshot?.place?.islandId]);
+
+  const send = useCallback((command: GameCommand) => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) { setError("게임 서버와 연결되지 않았습니다."); return; }
+    if (synchronizing) { setError("게임 상태를 동기화하고 있습니다."); return; }
+    const commandId = nextCommandId();
+    pendingCommands.current.add(commandId);
+    setPending(true);
+    setError("");
+    socket.send(JSON.stringify({ type: "game_command", commandId, command }));
+  }, [synchronizing]);
+
+  const reconnect = (fresh = false) => {
+    if (fresh) { snapshotRef.current = null; setSnapshot(null); lastRevision.current = 0; }
+    setError("");
+    setGeneration((value) => value + 1);
+  };
+
+  if (!snapshot || !identity?.characterId) return (
+    <main className="grid min-h-dvh place-content-center gap-5 bg-[#071316] px-6 text-center text-[#efece1]">
+      <h1 className="font-[family-name:var(--font-display)] text-3xl">게임에 연결하는 중</h1>
+      {error ? <p role="alert" className="text-sm text-amber-200">{error}</p> : <p className="text-sm text-[#aebdb9]">방의 현재 상태를 받고 있습니다.</p>}
+      {error ? <button className="rounded bg-[#d9bc82] px-5 py-3 text-[#172322]" onClick={() => reconnect(true)}>새 상태 받기</button> : null}
+      <Link href="/rooms" className="text-sm text-[#aebdb9]">멀티플레이로 돌아가기</Link>
+    </main>
+  );
+
+  const move = (request: MoveRequest) => send({ kind: "move", request });
+  const value: PlayContextValue = {
+    state: { ...snapshot, pending: pending || synchronizing || !connected },
+    identity,
+    sendAction: (text) => { if (text.trim()) send({ kind: "act", text }); },
+    move: {
+      toLocation: (locationId) => move({ kind: "location", locationId }),
+      toSpot: (spotId, characterIds) => move({ kind: "spot", spotId, characterIds: characterIds?.length ? characterIds : [identity.characterId] }),
+      toIsland: (islandId) => move({ kind: "island", islandId }),
+    },
+  };
+
+  return (
+    <PlayContext.Provider value={value}>
+      {children}
+      {error || !connected ? <div className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center gap-4 bg-[#291e1b] p-3 text-sm text-[#ffe0ba]" role="alert">
+        <span>{error || "게임 서버 연결 중"}</span>
+        <button className="rounded bg-[#d9bc82] px-3 py-1.5 font-semibold text-[#172322]" onClick={() => reconnect(error.includes("이력") || error.includes("새 상태"))}>{error.includes("이력") || error.includes("새 상태") ? "새 상태 받기" : "다시 연결"}</button>
+      </div> : null}
+    </PlayContext.Provider>
+  );
 }
 
 function usePlay(): PlayContextValue {
-  const ctx = useContext(PlayContext);
-  if (!ctx) throw new Error("@codysseia/play 훅은 /islands 플레이 화면 안에서만 쓸 수 있다.");
-  return ctx;
+  const context = useContext(PlayContext);
+  if (!context) throw new Error("@codysseia/play 훅은 방에서 시작한 게임 화면에서만 쓸 수 있습니다.");
+  return context;
 }
 
-/** 현재 게임 상태 (읽기 전용). */
-export function useGameState(): GameState {
-  return usePlay().state;
-}
-
-/** 플레이어 행동을 GM·엔진에 보낸다. */
-export function useSendAction(): (text: string) => void {
-  return usePlay().sendAction;
-}
-
-/** 이동. 엔진이 조건을 판정해 바로 옮기고, GM 은 도착을 묘사한다 (대전제 8.6). */
-export function useMove(): Mover {
-  return usePlay().move;
-}
+export function useGameState(): GameState { return usePlay().state; }
+export function useSendAction(): (text: string) => void { return usePlay().sendAction; }
+export function useMove(): Mover { return usePlay().move; }
+export function usePlayIdentity(): PlayContextValue["identity"] { return usePlay().identity; }

@@ -6,17 +6,17 @@ import { GMLog } from "./gm-log";
 import { LocationPanel } from "./location-panel";
 import { PartyStatus } from "./party-status";
 import { SceneArea } from "./scene-area";
+import styles from "./play-ui.module.css";
 
 export function PlayFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-dvh flex-col md:grid md:grid-cols-[minmax(0,1fr)_16rem] md:grid-rows-[minmax(0,1fr)_18rem]">
+    <div className={styles.frame}>
       <SceneArea>{children}</SceneArea>
-      <aside className="max-h-56 overflow-y-auto border-t border-zinc-200 md:row-span-2 md:max-h-none md:border-l md:border-t-0 dark:border-zinc-800">
+      <aside className={styles.sidebar}>
         <LocationPanel />
-        <div className="border-t border-zinc-200 dark:border-zinc-800" />
         <PartyStatus />
       </aside>
-      <section className="flex h-64 flex-col border-t border-zinc-200 md:col-start-1 md:row-start-2 md:h-auto dark:border-zinc-800">
+      <section className={styles.dialogue}>
         <GMLog />
         <ActionInput />
       </section>

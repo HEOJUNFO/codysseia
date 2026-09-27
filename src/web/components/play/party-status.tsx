@@ -1,19 +1,20 @@
 "use client";
 
 import { useGameState } from "@/lib/play/provider";
+import styles from "./play-ui.module.css";
 
 function Meter({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
-    <div className="text-xs">
-      <div className="flex justify-between text-zinc-500">
+    <div className={styles.meter}>
+      <div className={styles.meterLabel}>
         <span>{label}</span>
         <span className="tabular-nums">
           {value}/{max}
         </span>
       </div>
-      <div className="mt-0.5 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-800">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      <div className={styles.meterTrack}>
+        <div className={`${styles.meterFill} ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -23,31 +24,31 @@ export function PartyStatus() {
   const { party, inventory, moves } = useGameState();
   const spotName = (id: string | null) => moves.spots.find((s) => s.id === id)?.name;
   return (
-    <div className="space-y-4 p-3">
+    <div className={styles.sidebarSection}>
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">파티</h2>
-        <ul className="mt-2 space-y-3">
+        <h2 className={styles.sectionTitle}>파티</h2>
+        <ul className="m-0 list-none p-0">
           {party.map((c) => (
-            <li key={c.id}>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-medium">{c.name}</span>
-                {spotName(c.spotId) ? <span className="truncate text-xs text-zinc-500">{spotName(c.spotId)}</span> : null}
+            <li key={c.id} className={styles.character}>
+              <div className={styles.characterName}>
+                <span>{c.name}</span>
+                {spotName(c.spotId) ? <small>{spotName(c.spotId)}</small> : null}
               </div>
-              <div className="mt-1 space-y-1">
-                <Meter label="HP" value={c.hp} max={c.maxHp} color="bg-rose-500" />
-                <Meter label="정신력" value={c.mind} max={c.maxMind} color="bg-indigo-500" />
+              <div>
+                <Meter label="HP" value={c.hp} max={c.maxHp} color={styles.hp} />
+                <Meter label="정신력" value={c.mind} max={c.maxMind} color={styles.mind} />
               </div>
             </li>
           ))}
         </ul>
       </section>
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">인벤토리</h2>
-        <ul className="mt-2 space-y-1 text-sm">
+      <section className={styles.moveSection}>
+        <h2 className={styles.sectionTitle}>인벤토리</h2>
+        <ul className={styles.inventory}>
           {inventory.map((item) => (
-            <li key={item.id} className="flex justify-between">
+            <li key={item.id}>
               <span>{item.name}</span>
-              <span className="tabular-nums text-zinc-500">×{item.qty}</span>
+              <span>×{item.qty}</span>
             </li>
           ))}
         </ul>

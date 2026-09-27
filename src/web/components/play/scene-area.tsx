@@ -9,10 +9,9 @@ import { useGameState } from "@/lib/play/provider";
 import { ArchipelagoMap } from "./archipelago-map";
 import { IslandMap } from "./island-map";
 import { VoyageOverlay } from "./voyage-overlay";
+import styles from "./play-ui.module.css";
 
 type Overlay = { kind: "island" | "archipelago"; at: string | undefined };
-
-const button = "rounded bg-black/40 px-2 py-1 text-xs text-white backdrop-blur hover:bg-black/60";
 
 export function SceneArea({ children }: { children: React.ReactNode }) {
   const { place } = useGameState();
@@ -22,22 +21,22 @@ export function SceneArea({ children }: { children: React.ReactNode }) {
   const toggle = (kind: Overlay["kind"]) => setOverlay(open === kind ? null : { kind, at: here });
 
   return (
-    <main className="relative min-h-0 flex-1 overflow-hidden" data-slot="scene">
+    <main className={styles.scene} data-slot="scene">
       {children}
       {open ? (
-        <div className="absolute inset-0 z-10 bg-black/85 pt-10">
+        <div className={styles.overlay}>
           {open === "island" ? <IslandMap /> : <ArchipelagoMap />}
         </div>
       ) : null}
       <VoyageOverlay />
-      <nav className="absolute left-3 top-3 z-20 flex gap-1.5">
-        <Link href="/" className={button}>
-          메인
+      <nav className={styles.sceneNav}>
+        <Link href="/rooms">
+          멀티플레이
         </Link>
-        <button className={`${button} ${open === "island" ? "ring-1 ring-white" : ""}`} onClick={() => toggle("island")}>
+        <button className={open === "island" ? styles.active : ""} onClick={() => toggle("island")}>
           섬 지도
         </button>
-        <button className={`${button} ${open === "archipelago" ? "ring-1 ring-white" : ""}`} onClick={() => toggle("archipelago")}>
+        <button className={open === "archipelago" ? styles.active : ""} onClick={() => toggle("archipelago")}>
           군도 지도
         </button>
       </nav>

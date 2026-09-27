@@ -2,12 +2,13 @@
 
 // 섬 지도: 발견한 지역과 보이는 길 (대전제 8.7). 갈 수 있는 지역을 누르면 이동한다.
 
-import { useGameState, useMove } from "@/lib/play/provider";
+import { useGameState, useMove, usePlayIdentity } from "@/lib/play/provider";
 import { chipClass, MapStage, Marker, Unplaced, type MarkerTone } from "./map-stage";
 
 export function IslandMap({ image }: { /** 기본값: island.yaml 의 map_image */ image?: string }) {
   const { islandMap, moves, pending, place } = useGameState();
   const move = useMove();
+  const canLead = usePlayIdentity().role === "host";
   const reachable = new Map(moves.locations.map((l) => [l.id, l.locked]));
   const byId = new Map(islandMap.locations.map((l) => [l.id, l]));
 
@@ -16,12 +17,12 @@ export function IslandMap({ image }: { /** 기본값: island.yaml 의 map_image 
     if (reachable.has(id)) return reachable.get(id) ? "locked" : "open";
     return visited ? "idle" : "unknown";
   };
-  const go = (id: string) => (!pending && reachable.get(id) === false ? () => move.toLocation(id) : undefined);
+  const go = (id: string) => (canLead && !pending && reachable.get(id) === false ? () => move.toLocation(id) : undefined);
   const unplaced = islandMap.locations.filter((l) => !l.position);
 
   return (
-    <div className="relative h-full w-full">
-      <MapStage image={image ?? islandMap.image} fallbackClassName="fill-stone-700" label={`${place?.islandName ?? ""} 지도`}>
+    <div className="relative h-full w-full bg-[#0b1d22]">
+      <MapStage image={image ?? islandMap.image} fallbackClassName="fill-[#17313a]" label={`${place?.islandName ?? ""} 지도`}>
         {(stage) => (
           <>
             {islandMap.paths.map((p) => {

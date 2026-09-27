@@ -4,20 +4,18 @@
 // 화면은 군도 지도 위로 배가 건너가는 모습을 거리에 비례한 몇 초 동안 보여준다.
 // 코어 틀(레이아웃)에 붙어 있어 섬 페이지가 바뀌어도 끊기지 않는다.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import { useGameState } from "@/lib/play/provider";
 import { formatHours } from "@/lib/play/time";
 import type { ArchipelagoIsland, Voyage } from "@/lib/play/types";
 import { MapStage, Marker } from "./map-stage";
+import styles from "./voyage-overlay.module.css";
 
 /** 화면 연출 길이(ms). 군도 지도 거리에 비례하고 1.5~5초 */
 function playMs(v: Voyage): number {
   const distance = Math.hypot(v.to.position.x - v.from.position.x, v.to.position.y - v.from.position.y);
   return Math.min(5000, Math.max(1500, distance * 50));
 }
-
-/** 도착한 뒤 잠깐 머무는 시간(ms) */
-const HOLD_MS = 700;
 
 export function VoyageOverlay() {
   const { voyage, archipelago } = useGameState();
@@ -30,24 +28,8 @@ export function VoyageOverlay() {
 }
 
 function Playback({ voyage, islands, onDone }: { voyage: Voyage; islands: ArchipelagoIsland[]; onDone: () => void }) {
-  const [progress, setProgress] = useState(0);
   const ms = playMs(voyage);
-
-  useEffect(() => {
-    const start = performance.now();
-    let frame = requestAnimationFrame(function tick(now) {
-      const elapsed = now - start;
-      setProgress(Math.min(1, elapsed / ms));
-      if (elapsed < ms + HOLD_MS) frame = requestAnimationFrame(tick);
-      else onDone();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [ms, onDone]);
-
   const { from, to } = voyage;
-  const eased = 1 - (1 - progress) ** 2;
-  const ship = { x: from.position.x + (to.position.x - from.position.x) * eased, y: from.position.y + (to.position.y - from.position.y) * eased };
-  const arrived = progress >= 1;
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-zinc-950 text-white" role="status" aria-live="polite">
@@ -59,7 +41,7 @@ function Playback({ voyage, islands, onDone }: { voyage: Voyage; islands: Archip
           </div>
         </div>
         <div className="text-right font-mono text-sm tabular-nums">
-          {arrived ? "도착" : formatHours(Math.round(voyage.hours * eased))} <span className="text-zinc-500">/ {formatHours(voyage.hours)}</span>
+          항해 중 <span className="text-zinc-500">· {formatHours(voyage.hours)}</span>
         </div>
       </div>
       <div className="relative min-h-0 flex-1">
@@ -67,22 +49,25 @@ function Playback({ voyage, islands, onDone }: { voyage: Voyage; islands: Archip
           {(stage) => {
             const a = stage.at(from.position);
             const b = stage.at(to.position);
-            const s = stage.at(ship);
             const u = stage.unit;
+            const motion = {
+              "--voyage-x": `${b.x - a.x}px`,
+              "--voyage-y": `${b.y - a.y}px`,
+              animationDuration: `${ms}ms`,
+            } as CSSProperties;
             return (
               <>
                 <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={u * 0.3} strokeDasharray={`${u} ${u * 0.8}`} className="stroke-sky-300/50" />
-                <line x1={a.x} y1={a.y} x2={s.x} y2={s.y} strokeWidth={u * 0.4} className="stroke-amber-300" />
                 {islands.map((i) => (
                   <Marker
                     key={i.id}
                     stage={stage}
                     point={i.position}
                     label={i.name}
-                    tone={i.id === to.id ? (arrived ? "current" : "open") : "idle"}
+                    tone={i.id === to.id ? "open" : "idle"}
                   />
                 ))}
-                <circle cx={s.x} cy={s.y} r={u * 1} strokeWidth={u * 0.3} className="fill-amber-300 stroke-white" />
+                <circle cx={a.x} cy={a.y} r={u * 1} strokeWidth={u * 0.3} className={`${styles.ship} fill-amber-300 stroke-white`} style={motion} onAnimationEnd={onDone} />
               </>
             );
           }}

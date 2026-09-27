@@ -142,4 +142,4 @@ export function Unplaced({ title, children }: { title: string; children: React.R
 }
 
 export const chipClass =
-  "rounded border border-white/40 px-2 py-0.5 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40";
+  "rounded-sm border-0 bg-white/10 px-3 py-1.5 text-white hover:bg-amber-300/20 disabled:cursor-not-allowed disabled:opacity-40";

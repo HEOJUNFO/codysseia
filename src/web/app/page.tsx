@@ -1,21 +1,26 @@
-// 메인 화면: 군도 지도 (대전제 8.7). 섬 목록과 파티 위치를 보여주고 플레이 화면으로 이어준다.
+"use client";
 
-import { connection } from "next/server";
-import { voyageHours } from "@codysseia/engine";
-import { ArchipelagoHome, type HomeIsland, type HomeParty } from "@/components/archipelago/archipelago-home";
+// 대전제 8.7: 메인 화면은 군도 지도다. 방 입장은 /rooms에서 한다.
+import { useEffect, useState } from "react";
+import { ArchipelagoHome, type HomeIsland } from "@/components/archipelago/archipelago-home";
+import { RoomArchipelago } from "@/components/archipelago/room-archipelago";
 import { islands } from "@/lib/islands.generated";
-import { peekParty } from "@/lib/play/session";
+import { PlayProvider } from "@/lib/play/provider";
 
-export default async function Home() {
-  await connection(); // 파티 위치는 요청마다 읽는다
-  const found = peekParty();
-  const partyIsland = islands.find((i) => i.id === found?.islandId);
-  const party: HomeParty = found && partyIsland ? { ...found, islandName: partyIsland.name } : null;
-  const from = partyIsland?.position;
+const entries: HomeIsland[] = islands.map((island) => ({ ...island, hours: null }));
 
-  const entries: HomeIsland[] = islands.map((i) => ({
-    ...i,
-    hours: from && i.position && i.playable && i.id !== partyIsland?.id ? voyageHours(from, i.position) : null,
-  }));
-  return <ArchipelagoHome islands={entries} party={party} />;
+export default function Home() {
+  const [inGame, setInGame] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/lobby/local", { cache: "no-store", signal: controller.signal })
+      .then((response) => response.json())
+      .then((status: { isMember: boolean; room: { phase: string } | null }) => {
+        setInGame(Boolean(status.isMember && status.room?.phase === "playing"));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+  if (inGame) return <PlayProvider><RoomArchipelago /></PlayProvider>;
+  return <ArchipelagoHome islands={entries} party={null} canLead={false} travelOptions={[]} onTravel={() => {}} pending={false} />;
 }

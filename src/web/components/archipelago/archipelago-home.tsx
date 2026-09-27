@@ -1,168 +1,87 @@
 "use client";
 
-// 메인 화면 = 군도 지도 (대전제 8.7). 섬 위 단계는 군도 하나뿐이다.
-// 등록된 모든 섬을 각자의 archipelago_position 에 보여준다. 준비 중인 섬도 자리를 차지한다.
-// 게임 상태는 바꾸지 않는다. 플레이는 /islands/<섬_id> 코어 틀에서 한다.
-
 import Link from "next/link";
 import { useState } from "react";
 import { MapStage, Marker, Unplaced, chipClass, type MarkerTone } from "@/components/play/map-stage";
 import type { IslandEntry } from "@/lib/islands.generated";
+import type { Moves } from "@/lib/play/types";
 import { formatHours } from "@/lib/play/time";
+import styles from "./archipelago-home.module.css";
 
-export type HomeIsland = IslandEntry & {
-  /** 파티가 있는 섬에서 이 섬까지 항해 시간. 파티가 없거나, 파티가 있는 섬이거나, 준비 중이면 null */
-  hours: number | null;
-};
-
+export type HomeIsland = IslandEntry & { hours: number | null };
 export type HomeParty = { islandId: string; islandName: string; time: number } | null;
 
-export function ArchipelagoHome({ islands, party }: { islands: HomeIsland[]; party: HomeParty }) {
-  const [selectedId, setSelectedId] = useState<string | null>(party?.islandId ?? null);
-  const selected = islands.find((i) => i.id === selectedId) ?? null;
-  const placed = islands.filter((i) => i.position);
-  const unplaced = islands.filter((i) => !i.position);
-  const playable = islands.filter((i) => i.playable);
-
-  const tone = (i: HomeIsland): MarkerTone => (i.id === party?.islandId ? "current" : i.playable ? "open" : "unknown");
-  const label = (i: HomeIsland) => (i.id === party?.islandId ? `${i.name} · 파티` : i.playable ? i.name : `${i.name} · 준비 중`);
+export function ArchipelagoHome({ islands, party, canLead, travelOptions, onTravel, pending }: {
+  islands: HomeIsland[];
+  party: HomeParty;
+  canLead: boolean;
+  travelOptions: Moves["islands"];
+  onTravel: (islandId: string) => void;
+  pending: boolean;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(party?.islandId ?? islands.find((island) => island.playable)?.id ?? null);
+  const selected = islands.find((island) => island.id === selectedId) ?? null;
+  const placed = islands.filter((island) => island.position);
+  const unplaced = islands.filter((island) => !island.position);
+  const playableCount = islands.filter((island) => island.playable).length;
+  const tone = (island: HomeIsland): MarkerTone => island.id === party?.islandId ? "current" : island.playable ? "open" : "unknown";
 
   return (
-    <div className="flex h-dvh flex-col md:flex-row">
-      <main className="relative min-h-0 flex-1 bg-black" data-slot="archipelago">
-        <MapStage image={null} fallbackClassName="fill-sky-950" label="군도 지도">
-          {(stage) =>
-            placed.map((i) => (
-              <Marker
-                key={i.id}
-                stage={stage}
-                point={i.position!}
-                label={label(i)}
-                tone={tone(i)}
-                selected={i.id === selectedId}
-                onSelect={() => setSelectedId(i.id)}
-              />
-            ))
-          }
+    <div className={styles.shell}>
+      <main className={styles.map} data-slot="archipelago">
+        <div className={styles.mapWash} />
+        <MapStage image={null} fallbackClassName="fill-transparent" label="군도 지도">
+          {(stage) => placed.map((island) => (
+            <Marker key={island.id} stage={stage} point={island.position!} label={island.id === party?.islandId ? `${island.name} · 파티` : island.name} tone={tone(island)} selected={island.id === selectedId} onSelect={() => setSelectedId(island.id)} />
+          ))}
         </MapStage>
-        {islands.length === 0 ? (
-          <p className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-zinc-300">
-            아직 섬이 없습니다. 오른쪽 안내대로 첫 섬을 만들어 보세요.
-          </p>
-        ) : null}
-        {unplaced.length > 0 ? (
-          <Unplaced title="위치 없음">
-            {unplaced.map((i) => (
-              <button key={i.id} className={chipClass} onClick={() => setSelectedId(i.id)}>
-                {i.name}
-              </button>
-            ))}
-          </Unplaced>
-        ) : null}
+        <div className={styles.mapHeader}>
+          <Link href="/rooms" className={styles.back}>← 멀티플레이</Link>
+          <div><span className={styles.kicker}>CODYSSEIA</span><h1>군도 지도</h1><p>가고 싶은 섬을 선택하세요</p></div>
+        </div>
+        {islands.length === 0 ? <p className={styles.empty}>아직 발견된 섬이 없습니다.</p> : null}
+        {unplaced.length > 0 ? <Unplaced title="위치 미정">{unplaced.map((island) => <button key={island.id} className={chipClass} onClick={() => setSelectedId(island.id)}>{island.name}</button>)}</Unplaced> : null}
+        <div className={styles.mapFoot}>발견된 섬 {islands.length} · 입장 가능 {playableCount}</div>
       </main>
-
-      <aside className="flex max-h-[55dvh] flex-col gap-5 overflow-y-auto border-t border-zinc-200 p-4 md:max-h-none md:w-80 md:border-l md:border-t-0 dark:border-zinc-800">
-        <header>
-          <h1 className="text-2xl font-semibold">코디세이아</h1>
-          <p className="mt-1 text-xs text-zinc-500">
-            군도 · 섬 {islands.length}개 (플레이 가능 {playable.length}개)
-          </p>
-        </header>
-
-        {party ? (
-          <Link
-            href={`/islands/${party.islandId}`}
-            className="rounded bg-amber-500 px-3 py-2 text-center text-sm font-medium text-black hover:bg-amber-400"
-          >
-            이어하기 · {party.islandName}
-            <span className="block text-xs font-normal">게임 시간 {party.time > 0 ? `${formatHours(party.time)} 경과` : "시작"}</span>
-          </Link>
-        ) : playable.length > 0 ? (
-          <Link
-            href={`/islands/${playable[0].id}`}
-            className="rounded bg-amber-500 px-3 py-2 text-center text-sm font-medium text-black hover:bg-amber-400"
-          >
-            게임 시작
-          </Link>
-        ) : null}
-
-        {selected ? <IslandCard island={selected} party={party} /> : <p className="text-sm text-zinc-500">지도에서 섬을 고르면 소개가 나옵니다.</p>}
-
-        {islands.length > 0 ? (
-          <section>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">섬 목록</h2>
-            <ul className="mt-2 space-y-1">
-              {islands.map((i) => (
-                <li key={i.id}>
-                  <button
-                    className={`flex w-full items-baseline justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900 ${i.id === selectedId ? "bg-zinc-100 dark:bg-zinc-900" : ""}`}
-                    onClick={() => setSelectedId(i.id)}
-                  >
-                    <span className={i.playable ? "" : "text-zinc-400"}>{i.name}</span>
-                    <span className="shrink-0 text-xs text-zinc-500">
-                      {i.id === party?.islandId ? "파티" : !i.playable ? "준비 중" : i.hours !== null ? formatHours(i.hours) : ""}
-                      {i.warnings.length > 0 ? <span className="text-amber-600"> · 경고</span> : null}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        <section className="mt-auto rounded border border-dashed border-zinc-300 p-3 text-xs text-zinc-500 dark:border-zinc-700">
-          <h2 className="font-semibold text-zinc-600 dark:text-zinc-300">섬 추가하기</h2>
-          <p className="mt-1">
-            <code>islands/&lt;섬_id&gt;/</code> 폴더를 만들고 <code>island.yaml</code>의 <code>archipelago_position</code>으로 이 지도 위 자리를
-            고릅니다. 양식은 <code>docs/01_섬_제작_템플릿.md</code>, 예시는 <code>islands/ash_harbor/</code>.
-          </p>
-          <p className="mt-1">
-            새 섬을 만든 뒤 <code>npm run sync:islands -w web</code>
-          </p>
-        </section>
+      <aside className={styles.sidebar}>
+        <div className={styles.sideTop}><span className={styles.kicker}>목적지 선택</span><h2>항해를 시작하세요</h2><p>지도 또는 아래 목록에서 섬을 고를 수 있습니다.</p></div>
+        {selected ? <IslandDetail island={selected} party={party} canLead={canLead} travel={travelOptions.find((option) => option.id === selected.id)} onTravel={onTravel} pending={pending} /> : <p className={styles.noSelection}>섬을 선택하면 이곳에 정보가 표시됩니다.</p>}
+        <div className={styles.islandList} aria-label="섬 목록">
+          {islands.map((island) => (
+            <button key={island.id} type="button" className={`${styles.islandItem} ${island.id === selectedId ? styles.islandItemActive : ""}`} onClick={() => setSelectedId(island.id)} aria-pressed={island.id === selectedId}>
+              <span>{island.name}</span><small>{island.id === party?.islandId ? "현재 위치" : island.playable ? island.hours !== null ? formatHours(island.hours) : "입장 가능" : "준비 중"}</small>
+            </button>
+          ))}
+        </div>
+        {party ? <p className={styles.partyNote}>파티 위치 · {party.islandName} · {party.time > 0 ? formatHours(party.time) : "시작"}</p> : null}
       </aside>
     </div>
   );
 }
 
-function IslandCard({ island, party }: { island: HomeIsland; party: HomeParty }) {
-  const status = island.id === party?.islandId ? "파티가 여기 있다" : island.playable ? "플레이 가능" : "준비 중";
-  const rows: [string, string | null][] = [
-    ["제작", island.author],
-    ["분위기", island.tone],
-    ["추천 레벨", island.recommendedLevel],
-    ["항해", island.hours !== null && party ? `${party.islandName}에서 ${formatHours(island.hours)}` : null],
-  ];
-
+function IslandDetail({ island, party, canLead, travel, onTravel, pending }: {
+  island: HomeIsland;
+  party: HomeParty;
+  canLead: boolean;
+  travel: Moves["islands"][number] | undefined;
+  onTravel: (islandId: string) => void;
+  pending: boolean;
+}) {
+  const current = island.id === party?.islandId;
+  const details: [string, string | null][] = [["제작", island.author], ["분위기", island.tone], ["추천 레벨", island.recommendedLevel], ["항해", island.hours !== null && party ? formatHours(island.hours) : null]];
   return (
-    <section className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold">{island.name}</h2>
-        <span className={`shrink-0 text-xs ${island.playable ? "text-sky-600" : "text-zinc-500"}`}>{status}</span>
-      </div>
-      {island.concept ? <p className="mt-2 text-sm">{island.concept}</p> : null}
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-        {rows
-          .filter(([, v]) => v)
-          .map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-zinc-500">{k}</dt>
-              <dd>{v}</dd>
-            </div>
-          ))}
-      </dl>
+    <section className={styles.detail} aria-live="polite">
+      <span className={styles.status}>{current ? "파티가 머무는 섬" : island.playable ? "탐험 가능한 섬" : "준비 중"}</span>
+      <h3>{island.name}</h3>
+      {island.concept ? <p className={styles.concept}>{island.concept}</p> : null}
+      <dl className={styles.meta}>{details.filter(([, value]) => value).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
+      {current ? <Link href={`/islands/${island.id}`} className={styles.enter}>탐험 이어하기<span aria-hidden="true">↗</span></Link>
+        : island.playable && canLead && travel && !travel.locked ? <button type="button" className={styles.enter} disabled={pending} onClick={() => onTravel(island.id)}>항해하기 · {formatHours(travel.hours)}<span aria-hidden="true">↗</span></button>
+        : <p className={styles.unavailable}>{!island.playable ? "아직 입장할 수 없습니다." : !canLead ? "호스트가 항해를 결정합니다." : travel?.locked ? "아직 항해할 수 없습니다." : "출발 지점에서 항해할 수 있습니다."}</p>}
       {island.problems.length + island.warnings.length > 0 ? (
-        <ul className="mt-2 list-disc pl-4 text-xs">
-          {island.problems.map((p) => (
-            <li key={p} className="text-zinc-500">
-              {p}
-            </li>
-          ))}
-          {island.warnings.map((w) => (
-            <li key={w} className="text-amber-600">
-              {w}
-            </li>
-          ))}
+        <ul className={styles.warnings}>
+          {island.problems.map((problem) => <li key={`problem:${problem}`}>{problem}</li>)}
+          {island.warnings.map((warning) => <li key={`warning:${warning}`}>{warning}</li>)}
         </ul>
       ) : null}
     </section>
