@@ -78,6 +78,10 @@ export type IslandMapData = {
   paths: { from: string; to: string; locked: boolean }[];
 };
 
+export type IslandMapUpdate =
+  | { kind: "full"; value: IslandMapData }
+  | { kind: "delta"; locationsAdded: IslandMapData["locations"]; pathsAdded: IslandMapData["paths"] };
+
 /** 현장 뷰: 현재 지역의 배경과 지점 */
 export type LocationViewData = {
   image: string | null;
@@ -132,7 +136,7 @@ export type GameChange =
       moves: Moves;
       visitedAdded: string[];
       discoveredAdded: string[];
-      islandMap: IslandMapData;
+      map: IslandMapUpdate;
       locationView: LocationViewData;
       time?: number;
       voyage?: Voyage;

@@ -1,6 +1,7 @@
 {
   "name": "codysseia",
   "private": true,
+  "type": "module",
   "workspaces": [
     "src/engine",
     "src/web"

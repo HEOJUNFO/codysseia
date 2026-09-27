@@ -12,14 +12,17 @@ function participant(name, role) {
     id: randomUUID(),
     name,
     role,
-    online: false,
     ready: false,
   };
 }
 
+function publicMember(room, member) {
+  return { ...member, online: Boolean(room.sockets.get(member.id)?.size) };
+}
+
 function publicRoom(room) {
   let onlineCount = 0;
-  for (const member of room.members.values()) if (member.online) onlineCount += 1;
+  for (const sockets of room.sockets.values()) if (sockets.size > 0) onlineCount += 1;
   return {
     id: room.id,
     name: room.name,
@@ -73,7 +76,6 @@ export class Lobby {
       members: new Map([[token, host]]),
       sockets: new Map(),
       events: [],
-      seq: 0,
       game: null,
     };
     this.#rooms.set(room.id, room);
@@ -113,9 +115,9 @@ export class Lobby {
     sockets.add(socket);
     socket.send(JSON.stringify({
       type: "snapshot",
-      seq: room.seq,
+      seq: room.events.length,
       room: publicRoom(room),
-      members: [...room.members.values()],
+      members: Array.from(room.members.values(), (entry) => publicMember(room, entry)),
       selfId: member.id,
       code: member.role === "host" ? room.code : undefined,
     }));
@@ -132,8 +134,7 @@ export class Lobby {
         selfCharacterId: room.game.characterFor(member.id),
       }));
     }
-    if (!member.online) {
-      member.online = true;
+    if (sockets.size === 1) {
       this.#publish(room, { type: "member_updated", member });
     }
     socket.on("message", (data) => {
@@ -211,8 +212,7 @@ export class Lobby {
       sockets.delete(socket);
       if (sockets.size === 0) {
         room.sockets.delete(member.id);
-        if (room.members.get(token) === member && member.online && this.#rooms.get(roomId) === room) {
-          member.online = false;
+        if (room.members.get(token) === member && this.#rooms.get(roomId) === room) {
           member.ready = false;
           this.#publish(room, { type: "member_updated", member });
         }
@@ -235,14 +235,16 @@ export class Lobby {
     const member = room.members.get(token);
     if (!member) return;
     room.members.delete(token);
+    const sockets = room.sockets.get(member.id);
+    room.sockets.delete(member.id);
     this.#publish(room, { type: "member_left", memberId: member.id });
-    for (const socket of room.sockets.get(member.id) ?? []) socket.close(1000, "left room");
+    for (const socket of sockets ?? []) socket.close(1000, "left room");
   }
 
   #startGame(room, socket) {
     if (room.phase !== "waiting") return;
     for (const member of room.members.values()) {
-      if (member.role === "player" && (!member.online || !member.ready)) {
+      if (member.role === "player" && (!room.sockets.get(member.id)?.size || !member.ready)) {
         socket.send(JSON.stringify({ type: "command_error", error: "모든 참가자가 준비해야 시작할 수 있습니다." }));
         return;
       }
@@ -264,7 +266,7 @@ export class Lobby {
   }
 
   #publish(room, change) {
-    const event = { ...change, member: change.member ? { ...change.member } : undefined, seq: ++room.seq };
+    const event = { ...change, member: change.member ? publicMember(room, change.member) : undefined, seq: room.events.length + 1 };
     room.events.push(event);
     this.#broadcast(room, event);
   }

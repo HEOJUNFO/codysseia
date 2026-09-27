@@ -1,6 +1,7 @@
 // 방 하나의 게임 상태. 엔진 판정과 공개 상태 투영을 소유하고, 전송·파일·React는 모른다.
 import {
   availableMoves,
+  islandMapDelta,
   islandMapView,
   moveToLocation,
   moveToSpot,
@@ -37,9 +38,7 @@ export class GameRoom {
   #log: LogEntry[] = [];
   #events: GameChange[] = [];
   #results = new Map<string, { ok: true } | { ok: false; error: string }>();
-  #nextLogId = 0;
   #voyage: Voyage | null = null;
-  #revision = 0;
   #closed = false;
   #commandQueue: Promise<void> = Promise.resolve();
 
@@ -68,7 +67,7 @@ export class GameRoom {
     this.#arrival(this.#engine.party.locationId, true);
   }
 
-  get revision(): number { return this.#revision; }
+  get revision(): number { return this.#events.length; }
 
   close(): void { this.#closed = true; }
 
@@ -81,7 +80,7 @@ export class GameRoom {
   }
 
   replay(from: number, to: number): Iterable<GameChange> | null {
-    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from || to - from > 255 || to > this.#revision) return null;
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from || to - from > 255 || to > this.revision) return null;
     const events = this.#events;
     return {
       *[Symbol.iterator]() {
@@ -148,7 +147,10 @@ export class GameRoom {
     const logEntries = this.#applyEvents(result.events);
     return { ok: true, event: this.#publish({
       kind: "scene",
-      ...this.#area(),
+      ...this.#locationArea(),
+      map: request.kind === "island"
+        ? { kind: "full", value: this.#islandMap() }
+        : { kind: "delta", ...islandMapDelta(this.#world, previous, result.state) },
       visitedAdded: result.state.visited.slice(previous.visited.length),
       discoveredAdded: result.state.discovered.slice(previous.discovered.length),
       ...(request.kind === "island" ? { time: result.state.time, voyage: this.#voyage ?? undefined, islandState: this.#currentIslandState() } : {}),
@@ -224,13 +226,13 @@ export class GameRoom {
   }
 
   #publish(change: Omit<Extract<GameChange, { kind: "scene" }>, "type" | "revision"> | Omit<Extract<GameChange, { kind: "spot" }>, "type" | "revision"> | Omit<Extract<GameChange, { kind: "log" }>, "type" | "revision"> | Omit<Extract<GameChange, { kind: "island_patch" }>, "type" | "revision">): GameChange {
-    const event = { type: "game_changed", revision: ++this.#revision, ...change } as GameChange;
+    const event = { type: "game_changed", revision: this.#events.length + 1, ...change } as GameChange;
     this.#events.push(event);
     return event;
   }
 
   #addLog(role: LogEntry["role"], text: string): LogEntry {
-    const entry = { id: `log-${++this.#nextLogId}`, role, text };
+    const entry = { id: `log-${this.#log.length + 1}`, role, text };
     this.#log.push(entry);
     return entry;
   }
@@ -264,22 +266,27 @@ export class GameRoom {
     return entries;
   }
 
-  #area(): Omit<Pick<SceneState, "place" | "moves" | "islandMap" | "locationView">, "place"> & { place: NonNullable<SceneState["place"]> } {
+  #locationArea(): Omit<Pick<SceneState, "place" | "moves" | "locationView">, "place"> & { place: NonNullable<SceneState["place"]> } {
     const engine = this.#engine;
     const location = this.#world.locations[engine.party.locationId];
     const island = this.#world.islands[location.islandId];
     return {
       place: { islandId: island.id, islandName: island.name, locationId: location.id, locationName: location.name, description: location.description },
       moves: availableMoves(this.#world, engine),
-      islandMap: { image: this.#assetUrl(island.id, island.mapImage), ...islandMapView(this.#world, engine) },
       locationView: { image: this.#assetUrl(island.id, location.image), spots: location.spots.map((spot) => ({ id: spot.id, name: spot.name, position: spot.position ?? null })) },
     };
+  }
+
+  #islandMap(): SceneState["islandMap"] {
+    const island = this.#world.islands[this.#engine.party.islandId];
+    return { image: this.#assetUrl(island.id, island.mapImage), ...islandMapView(this.#world, this.#engine) };
   }
 
   #scene(): SceneState {
     const engine = this.#engine;
     return {
-      ...this.#area(),
+      ...this.#locationArea(),
+      islandMap: this.#islandMap(),
       party: this.#party(),
       visited: engine.visited,
       discovered: engine.discovered,

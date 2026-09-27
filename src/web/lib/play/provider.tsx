@@ -47,6 +47,18 @@ function applyChange(state: GameState, change: GameChange): GameState {
   }
   if (change.kind === "scene") {
     const islandChanged = state.place?.islandId !== change.place.islandId;
+    const islandMap = change.map.kind === "full" ? change.map.value : {
+      ...state.islandMap,
+      locations: [
+        ...state.islandMap.locations.map((location) =>
+          location.id === state.place?.locationId || location.id === change.place.locationId
+            ? { ...location, current: location.id === change.place.locationId, visited: location.visited || location.id === change.place.locationId }
+            : location,
+        ),
+        ...change.map.locationsAdded,
+      ],
+      paths: change.map.pathsAdded.length ? [...state.islandMap.paths, ...change.map.pathsAdded] : state.islandMap.paths,
+    };
     return {
       ...state,
       party: state.party.map((character) => character.spotId === null ? character : { ...character, spotId: null }),
@@ -55,7 +67,7 @@ function applyChange(state: GameState, change: GameChange): GameState {
       visited: change.visitedAdded.length ? [...state.visited, ...change.visitedAdded] : state.visited,
       discovered: change.discoveredAdded.length ? [...state.discovered, ...change.discoveredAdded] : state.discovered,
       archipelago: islandChanged ? state.archipelago.map((island) => ({ ...island, current: island.id === change.place.islandId })) : state.archipelago,
-      islandMap: change.islandMap,
+      islandMap,
       locationView: change.locationView,
       time: change.time ?? state.time,
       voyage: change.voyage ?? state.voyage,

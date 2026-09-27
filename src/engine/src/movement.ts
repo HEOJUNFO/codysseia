@@ -2,7 +2,8 @@
 //   섬 간    travelToIsland  — 출발 가능 지역에서만, 도착 섬의 entry_location 으로. 군도 지도 거리만큼 시간이 흐른다
 //   지역 간  moveToLocation  — 현재 지역의 connections 를 따라서
 //   지역 안  moveToSpot      — 캐릭터마다 따로
-// 모든 함수는 순수 함수다. 상태를 고치지 않고 새 상태를 돌려준다.
+// 상태 전이 함수는 입력 상태를 고치지 않고 새 상태를 돌려준다.
+// 지도 증분 계산은 읽기 전용 월드의 역방향 연결을 한 번 색인해 재사용한다.
 
 import type { CharacterId, Connection, EngineState, IslandId, LocationId, Point, SpotId, World } from "./types.ts";
 
@@ -64,8 +65,12 @@ function departurePoints(world: World, islandId: IslandId): LocationId[] {
 }
 
 function addUnique<T>(list: T[], items: T[]): T[] {
-  const next = [...list];
-  for (const item of items) if (!next.includes(item)) next.push(item);
+  let next = list;
+  for (const item of items) {
+    if (next.includes(item)) continue;
+    if (next === list) next = [...list];
+    next.push(item);
+  }
   return next;
 }
 
@@ -188,21 +193,79 @@ export type IslandMapView = {
   paths: { from: LocationId; to: LocationId; locked: boolean }[];
 };
 
+export type IslandMapDelta = {
+  locationsAdded: IslandMapView["locations"];
+  pathsAdded: IslandMapView["paths"];
+};
+
+const incomingByWorld = new WeakMap<World, Map<LocationId, { from: LocationId; connection: Connection }[]>>();
+
+function incomingConnections(world: World): Map<LocationId, { from: LocationId; connection: Connection }[]> {
+  const cached = incomingByWorld.get(world);
+  if (cached) return cached;
+  const incoming = new Map<LocationId, { from: LocationId; connection: Connection }[]>();
+  for (const location of Object.values(world.locations)) {
+    for (const connection of location.connections) {
+      const edges = incoming.get(connection.to) ?? [];
+      edges.push({ from: location.id, connection });
+      incoming.set(connection.to, edges);
+    }
+  }
+  incomingByWorld.set(world, incoming);
+  return incoming;
+}
+
+/** 같은 섬에서 이동할 때 새로 드러난 지도 요소만 보낸다. 현재 위치 표시는 수신 측이 이동 전후 위치로 갱신한다. */
+export function islandMapDelta(world: World, before: EngineState, after: EngineState): IslandMapDelta {
+  if (before.party.islandId !== after.party.islandId) throw new Error("섬 간 이동에는 전체 지도가 필요하다.");
+  const islandId = after.party.islandId;
+  const added = after.discovered.slice(before.discovered.length).filter((id) => world.locations[id]?.islandId === islandId);
+  const pathsAdded: IslandMapView["paths"] = [];
+  if (added.length > 0) {
+    const addedIds = new Set(added);
+    const incoming = incomingConnections(world);
+    for (const id of added) {
+      for (const connection of world.locations[id].connections) {
+        if (after.discovered.includes(connection.to) && isVisible(connection, after.flags)) {
+          pathsAdded.push({ from: id, to: connection.to, locked: !allSet(after.flags, connection.requiresFlags) });
+        }
+      }
+      for (const { from, connection } of incoming.get(id) ?? []) {
+        if (!addedIds.has(from) && after.discovered.includes(from) && isVisible(connection, after.flags)) {
+          pathsAdded.push({ from, to: id, locked: !allSet(after.flags, connection.requiresFlags) });
+        }
+      }
+    }
+  }
+  return {
+    locationsAdded: added.map((id) => ({
+      id,
+      name: world.locations[id].name,
+      position: world.locations[id].mapPosition ?? null,
+      visited: after.visited.includes(id),
+      current: id === after.party.locationId,
+    })),
+    pathsAdded,
+  };
+}
+
 /** 섬 지도에 그릴 것. 발견하지 못한 지역과 숨은 길은 넣지 않는다. */
 export function islandMapView(world: World, state: EngineState): IslandMapView {
   const islandId = state.party.islandId;
   const shown = state.discovered.filter((id) => world.locations[id]?.islandId === islandId);
+  const shownIds = new Set(shown);
+  const visitedIds = new Set(state.visited);
   return {
     locations: shown.map((id) => ({
       id,
       name: world.locations[id].name,
       position: world.locations[id].mapPosition ?? null,
-      visited: state.visited.includes(id),
+      visited: visitedIds.has(id),
       current: id === state.party.locationId,
     })),
     paths: shown.flatMap((from) =>
       world.locations[from].connections
-        .filter((c) => shown.includes(c.to) && isVisible(c, state.flags))
+        .filter((c) => shownIds.has(c.to) && isVisible(c, state.flags))
         .map((c) => ({ from, to: c.to, locked: !allSet(state.flags, c.requiresFlags) })),
     ),
   };

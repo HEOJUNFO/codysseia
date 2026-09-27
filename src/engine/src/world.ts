@@ -73,11 +73,13 @@ export function loadIsland(islandDir: string): LoadedIsland {
   const islandFile = path.join(islandDir, "island.yaml");
   if (!fs.existsSync(islandFile)) return { island: null, locations: [], errors: ["island.yaml 이 없다"] };
   const rawIsland = readYaml(islandFile, errors, "island.yaml");
-  if (rawIsland !== undefined && !validateIsland(rawIsland)) {
+  const islandValid = rawIsland !== undefined && validateIsland(rawIsland);
+  if (rawIsland !== undefined && !islandValid) {
     errors.push(...formatErrors("island.yaml", validateIsland.errors));
   }
 
   const locations: LocationDef[] = [];
+  const locationIds = new Set<string>();
   const locDir = path.join(islandDir, "locations");
   const locFiles = fs.existsSync(locDir) ? fs.readdirSync(locDir).filter((f) => /\.ya?ml$/.test(f)).sort() : [];
   const spotIds = new Set<string>();
@@ -93,7 +95,8 @@ export function loadIsland(islandDir: string): LoadedIsland {
     const loc = raw as RawLocation;
     checkAsset(islandDir, `${label} image`, loc.image, errors);
     if (!loc.id.startsWith(`${islandId}.loc.`)) errors.push(`${label}: id 는 ${islandId}.loc. 으로 시작해야 한다 (${loc.id})`);
-    if (locations.some((l) => l.id === loc.id)) errors.push(`${label}: 지역 id 중복 (${loc.id})`);
+    if (locationIds.has(loc.id)) errors.push(`${label}: 지역 id 중복 (${loc.id})`);
+    locationIds.add(loc.id);
     for (const spot of loc.spots ?? []) {
       if (!spot.id.startsWith(`${islandId}.spot.`)) errors.push(`${label}: 지점 id 는 ${islandId}.spot. 으로 시작해야 한다 (${spot.id})`);
       if (spotIds.has(spot.id)) errors.push(`${label}: 지점 id 중복 (${spot.id})`);
@@ -118,7 +121,6 @@ export function loadIsland(islandDir: string): LoadedIsland {
 
   if (locFiles.length === 0) errors.push("locations/ 에 지역이 하나도 없다");
 
-  const locationIds = new Set(locations.map((l) => l.id));
   for (const loc of locations) {
     for (const c of loc.connections) {
       if (c.to === loc.id) errors.push(`${loc.id}: 자기 자신으로 가는 연결`);
@@ -127,7 +129,7 @@ export function loadIsland(islandDir: string): LoadedIsland {
   }
 
   let island: IslandDef | null = null;
-  if (rawIsland !== undefined && validateIsland(rawIsland)) {
+  if (islandValid) {
     const raw = rawIsland as RawIsland;
     checkAsset(islandDir, "island.yaml map_image", raw.map_image, errors);
     if (raw.id !== islandId) errors.push(`island.yaml: id(${raw.id})가 폴더 이름(${islandId})과 다르다`);

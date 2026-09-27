@@ -2,6 +2,7 @@
   "name": "@codysseia/web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "sync:islands": "node scripts/sync-island-routes.mjs",
     "postinstall": "node scripts/sync-island-routes.mjs",

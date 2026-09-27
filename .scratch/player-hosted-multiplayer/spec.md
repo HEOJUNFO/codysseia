@@ -65,7 +65,7 @@ schemas/               섬 데이터 스키마
 islands/<섬_id>/        섬 데이터·gm.md·assets·web 장면
 ```
 
-이는 `src/` 안의 모듈 목표 배치다. 현재 [`src/engine/src/movement.ts`](../../src/engine/src/movement.ts)의 순수 규칙은 유지하고, 파일 읽기·YAML 파싱이 섞인 [`src/engine/src/world.ts`](../../src/engine/src/world.ts)는 검증 규칙과 파일 어댑터로 나눈다. [`src/web/lib/play/session.ts`](../../src/web/lib/play/session.ts)의 전역 세션·하드코딩된 캐릭터·로그·가짜 GM·상태 투영은 방 애플리케이션으로 옮긴다. [`src/web/lib/play/provider.tsx`](../../src/web/lib/play/provider.tsx)의 공개 훅 모양은 유지하며 내부 전송만 바꾼다.
+이는 `src/` 안의 모듈 목표 배치다. 현재 [`src/engine/src/movement.ts`](../../src/engine/src/movement.ts)의 순수 규칙은 유지하고, 파일 읽기·YAML 파싱이 섞인 [`src/engine/src/world.ts`](../../src/engine/src/world.ts)는 검증 규칙과 파일 어댑터로 나눈다. 방 상태와 게임 이력은 [`src/game/room.ts`](../../src/game/room.ts)가 소유한다. [`src/web/lib/play/provider.tsx`](../../src/web/lib/play/provider.tsx)의 공개 훅 모양은 유지하며 내부 전송만 바꾼다.
 
 ## 방과 상태 소유권
 
@@ -144,7 +144,7 @@ WebSocket은 인증된 입장 뒤 양방향 메시지를 주고받는다. 클라
 
 | 단계 | 작업 | 완료 기준 |
 |---|---|---|
-| 1. 방 코어 분리 | `session.ts`의 상태와 규칙을 `Room` 애플리케이션으로 옮기고 공개/비공개 범위의 변경분 생성을 분리 | 브라우저나 Next 없이 방에 명령을 넣어 같은 엔진 결과를 얻고, 영향받은 엔티티만 갱신한다 |
+| 1. 방 코어 분리 | `src/game/room.ts`에서 상태와 규칙을 소유하고 공개/비공개 범위의 변경분 생성을 분리 | 브라우저나 Next 없이 방에 명령을 넣어 같은 엔진 결과를 얻고, 영향받은 엔티티만 갱신한다 |
 | 2. 저장 | 전체 이력의 추가 기록, 공개 이력 분리, 범위별 투영, 스키마 버전, 명령 중복 제거 | 재시작 후 필요한 범위만 복원하고 오래된 `revision`부터 누락 구간을 스트리밍한다 |
 | 3. 실시간 연결 | 버전 있는 WebSocket 계약, 입장·캐릭터 소유권, 범위별 증분 발행, 변경분 번호·재전송 | 두 브라우저가 같은 상태를 보며, 1 다음 4를 받으면 2·3을 복구하기 전 4를 반영하지 않는다 |
 | 4. GM 통합 | 기존 GM 스펙의 턴 큐·Codex·MCP를 `Room`에 연결하고 준비·완료 이벤트로 턴을 전이 | 행동과 도구 호출이 한 번만 확정되고 모두에게 같은 결과가 보인다 |

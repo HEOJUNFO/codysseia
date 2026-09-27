@@ -32,6 +32,27 @@ const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js"];
 const ISLAND_ID = /^[a-z][a-z0-9_]*$/;
 
 const HEADER = "// 자동 생성 — 직접 고치지 않는다. (src/web/scripts/sync-island-routes.mjs)";
+const expectedFiles = new Set();
+
+function writeGenerated(target, content) {
+  expectedFiles.add(target);
+  if (fs.existsSync(target) && fs.readFileSync(target, "utf8") === content) return;
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, content);
+}
+
+function removeStaleGenerated(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const target = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      removeStaleGenerated(target);
+      if (fs.readdirSync(target).length === 0) fs.rmdirSync(target);
+    } else if (!expectedFiles.has(target) && fs.readFileSync(target, "utf8").startsWith("// 자동 생성 — 직접 고치지 않는다.")) {
+      fs.unlinkSync(target);
+    }
+  }
+}
 
 // 플레이 가능한 섬의 조건 (대전제 8.5). 문제 목록이 비어 있어야 플레이할 수 있다.
 // island.yaml·locations/ 는 엔진이 스키마와 참조까지 검증한다.
@@ -46,8 +67,7 @@ function checkIsland(dir) {
 
 function writeAssetRoute(islandId) {
   const target = path.join(outDir, islandId, "assets", "[...path]", "route.ts");
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(
+  writeGenerated(
     target,
     [HEADER, `import { islandAssetHandler } from "@/lib/island-assets";`, "", `export const GET = islandAssetHandler(${JSON.stringify(islandId)});`, ""].join("\n"),
   );
@@ -110,20 +130,16 @@ function readIslandInfo(islandDir, islandId) {
 function writeStub(islandId, webRoot, source) {
   const rel = path.relative(webRoot, source);
   const target = path.join(outDir, islandId, rel.replace(/\.(ts|jsx|js)$/, ".tsx"));
-  fs.mkdirSync(path.dirname(target), { recursive: true });
 
   const from = toImportPath(path.dirname(target), source);
   const lines = [`// 자동 생성 — 직접 고치지 않는다. 원본: ${posix(path.relative(sourceDir, source))}`];
   // "use client" 모듈에서는 export * 를 쓸 수 없고, metadata 도 내보낼 수 없다.
   if (!isClientModule(source)) lines.push(`export * from "${from}";`);
   lines.push(`export { default } from "${from}";`, "");
-  fs.writeFileSync(target, lines.join("\n"));
+  writeGenerated(target, lines.join("\n"));
 }
 
 function sync() {
-  fs.rmSync(outDir, { recursive: true, force: true });
-  fs.mkdirSync(outDir, { recursive: true });
-
   const islands = [];
   const loadedIslands = [];
   const skipped = [];
@@ -151,10 +167,10 @@ function sync() {
 
   const warnings = archipelagoWarnings(loadedIslands);
   for (const entry of islands) entry.warnings = warnings[entry.id] ?? [];
+  removeStaleGenerated(outDir);
 
   islands.sort((a, b) => a.id.localeCompare(b.id));
-  fs.mkdirSync(path.dirname(manifestFile), { recursive: true });
-  fs.writeFileSync(
+  writeGenerated(
     manifestFile,
     [
       HEADER,
