@@ -21,6 +21,8 @@ type PlayContextValue = {
   sendAction: (text: string) => void;
   sendIslandAction: (action: string, payload: JsonValue) => void;
   endTurn: () => void;
+  passBatch: () => void;
+  proceedBatch: () => void;
   move: Mover;
   identity: { roomId: string; role: "host" | "player"; characterId: string };
 };
@@ -46,13 +48,21 @@ function hasCurrentGameState(value: unknown): value is RoomGameState {
   if (!value || typeof value !== "object") return false;
   const state = value as Partial<RoomGameState>;
   const turn = state.turn;
-  return Boolean(state.islandState && typeof state.gmThinking === "boolean" && turn && (
+  return Boolean(state.islandState && typeof state.gmThinking === "boolean" && state.batch !== undefined && turn && (
     turn.mode === "free" ||
     (turn.mode === "ordered" && Number.isInteger(turn.round) && Array.isArray(turn.order) && typeof turn.activeCharacterId === "string")
   ));
 }
 
+/** 묶음·GM 턴 진행은 어떤 변경분에든 실릴 수 있다. 실린 필드만 바꾼다 */
 function applyChange(state: RoomGameState, change: GameChange): RoomGameState {
+  const next = applyStateChange(state, change);
+  if (change.batch === undefined && change.gmThinking === undefined) return next;
+  return { ...next, batch: change.batch === undefined ? next.batch : change.batch, gmThinking: change.gmThinking ?? next.gmThinking };
+}
+
+function applyStateChange(state: RoomGameState, change: GameChange): RoomGameState {
+  if (change.kind === "flow") return state;
   if (change.kind === "spot") {
     return {
       ...state,
@@ -88,7 +98,6 @@ function applyChange(state: RoomGameState, change: GameChange): RoomGameState {
       islandState: change.islandState ?? state.islandState,
       turn: change.turn ?? state.turn,
       log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log,
-      gmThinking: change.gmThinking ?? state.gmThinking,
     };
   }
   if (change.kind === "island_patch") {
@@ -97,7 +106,7 @@ function applyChange(state: RoomGameState, change: GameChange): RoomGameState {
     return { ...state, islandState, turn: change.turn ?? state.turn, log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log };
   }
   if (change.kind === "turn") return { ...state, turn: change.turn };
-  return { ...state, log: [...state.log, ...change.logEntries], gmThinking: change.gmThinking ?? state.gmThinking };
+  return { ...state, log: [...state.log, ...change.logEntries] };
 }
 
 export function PlayProvider({ children }: { children: React.ReactNode }) {
@@ -270,6 +279,8 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
     sendAction: (text) => { if (text.trim()) send({ kind: "act", text }); },
     sendIslandAction: (action, payload) => send({ kind: "island", action, payload }),
     endTurn: () => send({ kind: "end_turn" }),
+    passBatch: () => send({ kind: "pass" }),
+    proceedBatch: () => send({ kind: "proceed" }),
     move: {
       toLocation: (locationId) => move({ kind: "location", locationId }),
       toSpot: (spotId, characterIds) => move({ kind: "spot", spotId, characterIds: characterIds?.length ? characterIds : [identity.characterId] }),
@@ -301,6 +312,11 @@ export function usePlayIdentity(): PlayContextValue["identity"] { return usePlay
 export function useIslandAction(): PlayContextValue["sendIslandAction"] { return usePlay().sendIslandAction; }
 export function useTurnState(): TurnState { return usePlay().state.turn; }
 export function useEndTurn(): () => void { return usePlay().endTurn; }
+/** 코어 틀 전용. 섬 장면에는 공개하지 않는다 */
+export function useBatchSignals(): Pick<PlayContextValue, "passBatch" | "proceedBatch"> {
+  const { passBatch, proceedBatch } = usePlay();
+  return { passBatch, proceedBatch };
+}
 export function useIslandPlayerState(characterId?: string): DeepReadonly<JsonObject> | null {
   const { state, identity } = usePlay();
   return state.islandState.players[characterId ?? identity.characterId] ?? null;

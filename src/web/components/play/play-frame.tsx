@@ -2,6 +2,7 @@
 // 섬 장면(children)은 장면 영역을 꽉 채우는 크기로 들어온다. 섬은 h-full 로 채우면 된다.
 
 import { ActionInput } from "./action-input";
+import { BatchStatus } from "./batch-status";
 import { GMLog } from "./gm-log";
 import { LocationPanel } from "./location-panel";
 import { PartyStatus } from "./party-status";
@@ -16,6 +17,7 @@ export function PlayFrame({ children }: { children: React.ReactNode }) {
       <aside className={styles.sidebar}>
         <LocationPanel />
         <TurnStatus />
+        <BatchStatus />
         <PartyStatus />
       </aside>
       <section className={styles.dialogue}>

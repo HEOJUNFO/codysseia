@@ -10,6 +10,13 @@
 .turnStatus { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 24px 0; padding: 12px 0; border-block: 1px solid rgba(217,188,130,.22); color: #e8d4a9; font-size: 12px; }
 .turnStatus button { min-height: 33px; padding: 0 10px; border: 0; border-radius: 3px; color: #172322; background: #d9bc82; font-size: 11px; font-weight: 750; cursor: pointer; }
 .turnStatus button:disabled { opacity: .46; cursor: not-allowed; }
+.batchStatus { margin: 24px 0; padding: 12px 0; border-block: 1px solid rgba(217,188,130,.22); color: #e8d4a9; font-size: 12px; }
+.batchStatus p { margin: 0 0 8px; }
+.batchStatus ul { margin: 0 0 10px; padding: 0; list-style: none; }
+.batchStatus li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; color: #b4c4b7; }
+.batchStatus div { display: flex; flex-wrap: wrap; gap: 6px; }
+.batchStatus button { min-height: 33px; padding: 0 10px; border: 0; border-radius: 3px; color: #172322; background: #d9bc82; font-size: 11px; font-weight: 750; cursor: pointer; }
+.batchStatus button:disabled { opacity: .46; cursor: not-allowed; }
 .placeHeader small { display: block; margin-bottom: 6px; color: #d8bc82; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
 .placeHeader h2 { margin: 0; font-family: var(--font-display),serif; font-size: 27px; font-weight: 600; letter-spacing: -.05em; }
 .placeHeader p { margin: 5px 0 0; color: #9eafa6; font-size: 11px; }

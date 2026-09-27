@@ -1,5 +1,6 @@
 // 게임 규칙과 화면이 공유하는 직렬화 계약. 정의는 전송 계층에 둔다.
 export type {
+  ActionBatch,
   ArchipelagoIsland,
   Character,
   DeepReadonly,

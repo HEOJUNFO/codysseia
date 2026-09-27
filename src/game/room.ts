@@ -13,7 +13,7 @@ import {
   type World,
 } from "@codysseia/engine";
 import { applyIslandPatch, copyJson, copyJsonObject, normalizeIslandPatch } from "../protocol/island-state.ts";
-import type { Character, GameChange, GameCommand, IslandPatch, IslandState, LogEntry, MoveRequest, RoomGameState, SceneState, TurnState, Voyage } from "../protocol/play.ts";
+import type { ActionBatch, Character, GameChange, GameCommand, IslandPatch, IslandState, LogEntry, MoveRequest, RoomGameState, SceneState, TurnFlow, TurnState, Voyage } from "../protocol/play.ts";
 import type { IslandActionHandler } from "./action-handler.ts";
 import type { GMInput, GMProvider, GMTurn } from "./gm-port.ts";
 import { advanceTurn, initialTurn, transitionTurn } from "./turn.ts";
@@ -26,6 +26,8 @@ type PublishableChange = { [Kind in GameChange["kind"]]: Omit<Extract<GameChange
 
 /** GM 턴 하나의 입력. logIds 는 이번 입력이 이미 남긴 로그라 최근 로그에서 뺀다 */
 type GMQueueItem = { inputs: GMInput[]; logIds: string[] };
+/** 모으는 중인 묶음 (이슈 06). signals 는 참가자(memberId)별 신호, closing 이면 GM 턴이 비는 대로 닫힌다 */
+type OpenBatch = GMQueueItem & { signals: Map<string, "ready" | "pass">; closing: boolean };
 
 /** GM 턴 입력에 넣는 최근 로그 수. 긴 세션 요약(대전제 9.3)은 아직 없다 */
 const RECENT_LOG = 12;
@@ -49,10 +51,15 @@ export class GameRoom {
   #turn: TurnState;
   #closed = false;
   #commandQueue: Promise<void> = Promise.resolve();
-  /** 방마다 GM 턴은 하나씩만 돈다. 도는 동안 들어온 행동과 도착은 여기서 기다린다 */
-  #gmQueue: GMQueueItem[] = [];
-  /** 큐가 빌 때까지 켜져 있다. 켠 시점은 그 계기가 된 변경분, 끈 시점은 마지막 서술 log 변경분의 gmThinking 으로 발행한다 */
+  /** 접속 중인 참가자(memberId). 끊긴 참가자는 묶음 판정에서 빠진다 */
+  readonly #online: Set<string>;
+  /** 다음 GM 턴으로 모으는 입력. 도는 턴 하나와 열린 묶음 하나만 있다 */
+  #batch: OpenBatch | null = null;
+  /** 방마다 GM 턴은 하나씩만 돈다 */
   #gmRunning = false;
+  /** 마지막으로 발행한 진행 상태. 바뀐 변경분에만 batch·gmThinking 을 싣는다 */
+  #shownBatch = "null";
+  #shownThinking = false;
 
   constructor(world: World, startIslandId: string, members: Iterable<RoomMember>, assetUrl: AssetUrl, rules: ReadonlyMap<string, IslandActionHandler>, gm: GMProvider) {
     this.#world = world;
@@ -73,14 +80,19 @@ export class GameRoom {
         spotId: null,
       });
     }
+    // 로비는 참가자 전원이 접속해 있을 때만 게임을 연다.
+    this.#online = new Set(this.#members.keys());
     this.#islands = Object.values(world.islands).sort((a, b) => a.id.localeCompare(b.id));
     const characterIds = Array.from(this.#characterIds());
     this.#engine = startGame(world, characterIds, startIslandId);
     this.#turn = initialTurn(world.islands[startIslandId].turnMode ?? "free", characterIds);
     this.#ensureIslandState(startIslandId);
     this.#addLog("system", "엔진 연결됨 · 행동과 도착은 GM이 서술합니다.");
-    // 첫 도착 서술은 발행할 변경분이 없다. 켜진 #gmRunning 은 스냅숏의 gmThinking 으로 전해진다.
-    if (this.#queueArrival([this.#arrivalInput(this.#engine.party.locationId, true)])) void this.#runGmTurns();
+    // 첫 도착 서술은 발행할 변경분이 없다. 진행 상태는 스냅숏으로 전해진다.
+    this.#queueArrival([this.#arrivalInput(this.#engine.party.locationId, true)]);
+    const start = this.#settle();
+    this.#flowChanges();
+    if (start) void this.#runGmTurn(start);
   }
 
   get revision(): number { return this.#events.length; }
@@ -96,6 +108,14 @@ export class GameRoom {
     return () => this.#listeners.delete(listener);
   }
 
+  /** 로비가 참가자의 첫 연결과 마지막 연결 종료 때 부른다. 끊긴 참가자를 기다리지 않게 묶음을 다시 판정한다. */
+  setPresence(memberId: string, online: boolean): void {
+    if (this.#closed || !this.#members.has(memberId) || this.#online.has(memberId) === online) return;
+    if (online) this.#online.add(memberId);
+    else this.#online.delete(memberId);
+    this.#commit(null);
+  }
+
   characterFor(memberId: string): string | null {
     return this.#characters.get(memberId)?.id ?? null;
   }
@@ -105,7 +125,7 @@ export class GameRoom {
   }
 
   snapshot(): RoomGameState {
-    return { ...this.#scene(), inventory: [], log: this.#log, islandState: this.#currentIslandState(), turn: this.#turn, gmThinking: this.#gmRunning };
+    return { ...this.#scene(), inventory: [], log: this.#log, islandState: this.#currentIslandState(), turn: this.#turn, gmThinking: this.#gmRunning, batch: this.#batchView() };
   }
 
   replay(from: number, to: number): Iterable<GameChange> | null {
@@ -138,6 +158,8 @@ export class GameRoom {
         : command?.kind === "act" ? this.#act(member, command.text)
         : command?.kind === "island" ? await this.#islandAction(member, command.action, command.payload)
         : command?.kind === "end_turn" ? this.#endTurn(member)
+        : command?.kind === "pass" ? this.#pass(member)
+        : command?.kind === "proceed" ? this.#proceed(member)
         : { ok: false, error: "알 수 없는 게임 명령입니다." };
     } catch (error) {
       outcome = { ok: false, error: error instanceof Error ? error.message : "게임 명령을 처리하지 못했습니다." };
@@ -175,11 +197,11 @@ export class GameRoom {
     this.#engine = result.state;
     if (request.kind === "island") this.#turn = initialTurn(this.#world.islands[request.islandId].turnMode ?? "free", this.#characterIds());
     if (request.kind === "spot") {
-      return { ok: true, event: this.#publish({ kind: "spot", characterId: request.characterIds[0], spotId: request.spotId }) };
+      return { ok: true, event: this.#commit({ kind: "spot", characterId: request.characterIds[0], spotId: request.spotId }) };
     }
     const { logEntries, narration } = this.#applyEvents(result.events);
-    const starting = this.#queueArrival(narrate ? narration : []);
-    const event = this.#publish({
+    this.#queueArrival(narrate ? narration : []);
+    const event = this.#commit({
       kind: "scene",
       ...this.#locationArea(),
       map: request.kind === "island"
@@ -189,9 +211,7 @@ export class GameRoom {
       discoveredAdded: result.state.discovered.slice(previous.discovered.length),
       ...(request.kind === "island" ? { time: result.state.time, voyage: this.#voyage ?? undefined, islandState: this.#currentIslandState(), turn: this.#turn } : {}),
       logEntries,
-      ...(starting ? { gmThinking: true } : {}),
     });
-    if (starting) void this.#runGmTurns();
     return { ok: true, event };
   }
 
@@ -205,48 +225,127 @@ export class GameRoom {
     const character = this.#characters.get(member.id);
     if (!character) return { ok: false, error: "캐릭터를 찾을 수 없습니다." };
     const entry = this.#addLog("player", `${member.name}: ${text}`, character.id);
-    const starting = this.#enqueueGm({ inputs: [{ kind: "action", characterId: character.id, characterName: character.name, text }], logIds: [entry.id] });
-    const event = this.#publish({ kind: "log", logEntries: [entry], ...(starting ? { gmThinking: true } : {}) });
-    if (starting) void this.#runGmTurns();
-    return { ok: true, event };
+    const batch = this.#openBatch();
+    batch.inputs.push({ kind: "action", characterId: character.id, characterName: character.name, text });
+    batch.logIds.push(entry.id);
+    batch.signals.set(member.id, "ready");
+    return { ok: true, event: this.#commit({ kind: "log", logEntries: [entry] }) };
   }
 
-  /** 큐에 넣고 #gmRunning 을 켠다. 이번에 켰으면 true — 부른 쪽이 그 변경분에 gmThinking 을 싣고 #runGmTurns 를 부른다. */
-  #enqueueGm(item: GMQueueItem): boolean {
-    this.#gmQueue.push(item);
-    if (this.#gmRunning) return false;
-    this.#gmRunning = true;
-    return true;
+  #pass(member: RoomMember): Outcome {
+    if (this.#turn.mode === "ordered") return { ok: false, error: "순서 턴에서는 차례 종료로 넘깁니다." };
+    const signal = this.#batch?.signals.get(member.id);
+    if (signal === "ready") return { ok: false, error: "이번 묶음에 이미 행동을 보냈습니다." };
+    if (signal === "pass") return { ok: true, event: null };
+    this.#openBatch().signals.set(member.id, "pass");
+    return { ok: true, event: this.#commit(null) };
+  }
+
+  #proceed(member: RoomMember): Outcome {
+    if (member.role !== "host") return { ok: false, error: "묶음 진행은 호스트가 결정합니다." };
+    if (this.#turn.mode === "ordered") return { ok: false, error: "순서 턴에서는 차례 종료로 넘깁니다." };
+    if (!this.#batch) return { ok: false, error: "모으고 있는 행동이 없습니다." };
+    if (this.#batch.closing) return { ok: true, event: null };
+    this.#batch.closing = true;
+    return { ok: true, event: this.#commit(null) };
+  }
+
+  #openBatch(): OpenBatch {
+    return this.#batch ??= { inputs: [], logIds: [], signals: new Map(), closing: false };
   }
 
   /**
-   * 도착 서술을 GM 큐에 넣는다. 아직 시작하지 않은 이전 도착은 파티가 이미 떠난 곳이라 버리고, 그 항해만 새 도착 앞에 잇는다.
-   * 큐에는 도착 항목이 많아야 하나라서 GM 턴의 현재 상태와 도착 장소가 어긋나지 않는다. inputs 가 비면(개발 명령) 이전 도착만 버린다.
+   * 도착 서술을 참가자 신호 없이 열린 묶음에 붙인다. 열린 묶음이 없으면 도착만으로 묶음을 열어 GM 턴이 비는 대로 닫는다.
+   * 묶음에 이전 도착이 남아 있으면 파티가 이미 떠난 곳이라 버리고, 그 항해만 새 도착 앞에 잇는다.
+   * 그래서 묶음의 도착은 많아야 하나고 GM 턴의 현재 상태와 도착 장소가 어긋나지 않는다. inputs 가 비면(개발 명령) 이전 도착만 버린다.
    */
-  #queueArrival(inputs: GMInput[]): boolean {
-    const index = this.#gmQueue.findIndex((item) => item.inputs.some((input) => input.kind === "arrival"));
-    const carried = index === -1 ? [] : this.#gmQueue.splice(index, 1)[0].inputs.filter((input) => input.kind === "voyage");
-    return inputs.length > 0 && this.#enqueueGm({ inputs: [...carried, ...inputs], logIds: [] });
+  #queueArrival(inputs: GMInput[]): void {
+    const batch = this.#batch;
+    if (!batch) {
+      if (inputs.length > 0) this.#batch = { inputs, logIds: [], signals: new Map(), closing: true };
+      return;
+    }
+    if (batch.inputs.some((input) => input.kind === "arrival")) {
+      const voyages = inputs.length > 0 ? batch.inputs.filter((input) => input.kind === "voyage") : [];
+      batch.inputs = batch.inputs.filter((input) => input.kind === "action");
+      inputs = [...voyages, ...inputs];
+    }
+    batch.inputs.push(...inputs);
+    if (batch.inputs.length === 0 && batch.signals.size === 0) this.#batch = null;
   }
 
-  /** #gmRunning 을 켠 쪽이 부른다. 큐가 비면 마지막 서술과 함께 GM 턴 종료를 발행한다. */
-  async #runGmTurns(): Promise<void> {
-    while (this.#gmQueue.length > 0 && !this.#closed) {
-      const item = this.#gmQueue.shift()!;
-      let entry: LogEntry;
-      try {
-        const text = (await this.#gm.narrate(this.#gmTurn(item), this.#gmAbort.signal)).trim();
-        if (this.#closed) break;
-        entry = text ? this.#addLog("gm", text) : this.#addLog("system", "GM이 빈 서술을 돌려주었습니다.");
-      } catch (error) {
-        if (this.#closed) break;
-        entry = this.#addLog("system", `GM 서술을 받지 못했습니다: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
-      }
-      const done = this.#gmQueue.length === 0;
-      if (done) this.#gmRunning = false;
-      this.#publish({ kind: "log", logEntries: [entry], ...(done ? { gmThinking: false } : {}) });
+  /** 열린 묶음이 닫힐 때가 되면 닫고 시작할 GM 턴을 돌려준다. 앞 턴이 도는 동안에는 닫지 않는다 — 그 턴의 완료가 다시 판정한다. */
+  #settle(): GMQueueItem | null {
+    const batch = this.#batch;
+    if (!batch || this.#gmRunning || !this.#batchComplete(batch)) return null;
+    this.#batch = null;
+    if (batch.inputs.length === 0) return null;
+    this.#gmRunning = true;
+    return { inputs: batch.inputs, logIds: batch.logIds };
+  }
+
+  #batchComplete(batch: OpenBatch): boolean {
+    if (batch.closing) return true;
+    // 순서 턴에서는 차례가 곧 묶음이다. 현재 차례만 행동할 수 있으므로 입력이 들어오면 닫는다.
+    if (this.#turn.mode === "ordered") return batch.inputs.length > 0;
+    for (const memberId of this.#online) if (!batch.signals.has(memberId)) return false;
+    return true;
+  }
+
+  #batchView(): ActionBatch | null {
+    const batch = this.#batch;
+    if (!batch) return null;
+    const signals: ActionBatch["signals"] = [];
+    const waiting: string[] = [];
+    for (const [memberId, character] of this.#characters) {
+      const signal = batch.signals.get(memberId);
+      if (signal) signals.push({ characterId: character.id, signal });
+      else if (this.#turn.mode === "free" && this.#online.has(memberId)) waiting.push(character.id);
+    }
+    return { signals, waiting, closing: batch.closing };
+  }
+
+  /** 마지막 발행 뒤 바뀐 진행 상태. 없으면 null */
+  #flowChanges(): TurnFlow | null {
+    const flow: TurnFlow = {};
+    const batch = this.#batchView();
+    const shown = JSON.stringify(batch);
+    if (shown !== this.#shownBatch) {
+      this.#shownBatch = shown;
+      flow.batch = batch;
+    }
+    if (this.#gmRunning !== this.#shownThinking) {
+      this.#shownThinking = this.#gmRunning;
+      flow.gmThinking = this.#gmRunning;
+    }
+    return flow.batch === undefined && flow.gmThinking === undefined ? null : flow;
+  }
+
+  /**
+   * 상태 전이 하나를 발행하는 유일한 길. 전이 직후 묶음을 한 번 판정하고, 바뀐 진행 상태를 같은 변경분에 싣는다.
+   * change 가 null 이면(신호·접속 변화) 진행이 바뀐 경우에만 flow 변경분을 발행한다. 닫힌 묶음의 GM 턴은 발행 뒤에 시작한다.
+   */
+  #commit(change: PublishableChange | null): GameChange | null {
+    const start = this.#settle();
+    const flow = this.#flowChanges();
+    const event = change ? this.#publish({ ...change, ...flow }) : flow ? this.#publish({ kind: "flow", ...flow }) : null;
+    if (start) void this.#runGmTurn(start);
+    return event;
+  }
+
+  /** #settle 이 연 GM 턴 하나를 돌린다. 턴의 완료가 서술을 발행하며 열린 묶음을 다시 판정한다. */
+  async #runGmTurn(item: GMQueueItem): Promise<void> {
+    let entry: LogEntry;
+    try {
+      const text = (await this.#gm.narrate(this.#gmTurn(item), this.#gmAbort.signal)).trim();
+      if (this.#closed) return;
+      entry = text ? this.#addLog("gm", text) : this.#addLog("system", "GM이 빈 서술을 돌려주었습니다.");
+    } catch (error) {
+      if (this.#closed) return;
+      entry = this.#addLog("system", `GM 서술을 받지 못했습니다: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
     }
     this.#gmRunning = false;
+    this.#commit({ kind: "log", logEntries: [entry] });
   }
 
   /** 턴이 시작되는 시점의 엔진 상태로 GM 입력을 만든다. 이번 턴의 행동 로그는 inputs 에만 넣는다. */
@@ -285,7 +384,7 @@ export class GameRoom {
     if (this.#turn.mode !== "ordered") return { ok: false, error: "진행 중인 순서 턴이 없습니다." };
     if (this.#turn.activeCharacterId !== this.characterFor(member.id) && member.role !== "host") return { ok: false, error: "자신의 턴만 종료할 수 있습니다." };
     this.#turn = advanceTurn(this.#turn);
-    return { ok: true, event: this.#publish({ kind: "turn", turn: this.#turn }) };
+    return { ok: true, event: this.#commit({ kind: "turn", turn: this.#turn }) };
   }
 
   async #islandAction(member: RoomMember, action: string, payload: unknown): Promise<Outcome> {
@@ -324,10 +423,10 @@ export class GameRoom {
     if (nextState !== state) this.#islandStates.set(islandId, nextState);
     this.#turn = nextTurn;
     if (patches.length === 0 && messages.length === 0) {
-      return { ok: true, event: result.turn === undefined ? null : this.#publish({ kind: "turn", turn: nextTurn }) };
+      return { ok: true, event: result.turn === undefined ? null : this.#commit({ kind: "turn", turn: nextTurn }) };
     }
     const logEntries = messages.map((message) => this.#addLog("system", message));
-    return { ok: true, event: this.#publish({ kind: "island_patch", patches, ...(result.turn === undefined ? {} : { turn: nextTurn }), logEntries }) };
+    return { ok: true, event: this.#commit({ kind: "island_patch", patches, ...(result.turn === undefined ? {} : { turn: nextTurn }), logEntries }) };
   }
 
   #ensureIslandState(islandId: string): IslandState {

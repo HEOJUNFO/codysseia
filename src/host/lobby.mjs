@@ -139,6 +139,7 @@ export class Lobby {
     }
     if (sockets.size === 1) {
       this.#publish(room, { type: "member_updated", member });
+      room.game?.setPresence(member.id, true);
     }
     socket.on("message", (data) => {
       if (this.#rooms.get(roomId) !== room || room.members.get(token) !== member) return;
@@ -217,6 +218,8 @@ export class Lobby {
         if (room.members.get(token) === member && this.#rooms.get(roomId) === room) {
           member.ready = false;
           this.#publish(room, { type: "member_updated", member });
+          // 끊긴 참가자는 행동 묶음을 기다리지 않는다 (연결 close 이벤트 기준).
+          room.game?.setPresence(member.id, false);
         }
       }
     });
