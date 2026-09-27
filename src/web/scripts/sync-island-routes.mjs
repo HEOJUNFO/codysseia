@@ -1,17 +1,17 @@
-// islands/<섬_id>/ 를 /islands/<섬_id> 플레이 화면의 장면 영역으로 연결한다 (대전제 8.5).
+// src/islands/<섬_id>/ 를 /islands/<섬_id> 플레이 화면의 장면 영역으로 연결한다 (대전제 8.5).
 //
-// 코어 틀(GM 로그, 행동 입력, 파티 상태)은 web/app/islands/layout.tsx 가 그리고,
-// 이 스크립트는 그 안에 들어갈 섬별 장면 페이지만 web/app/islands/(generated)/ 에 만든다.
-//   islands/ash_harbor/web/page.tsx         → /islands/ash_harbor
-//   islands/ash_harbor/web/map/page.tsx     → /islands/ash_harbor/map
-//   islands/ash_harbor/assets/map.png       → /islands/ash_harbor/assets/map.png
+// 코어 틀(GM 로그, 행동 입력, 파티 상태)은 src/web/app/islands/layout.tsx 가 그리고,
+// 이 스크립트는 그 안에 들어갈 섬별 장면 페이지만 src/web/app/islands/(generated)/ 에 만든다.
+//   src/islands/ash_harbor/web/page.tsx     → /islands/ash_harbor
+//   src/islands/ash_harbor/web/map/page.tsx → /islands/ash_harbor/map
+//   src/islands/ash_harbor/assets/map.png   → /islands/ash_harbor/assets/map.png
 //
 // 플레이 조건(PLAY_REQUIREMENTS)을 모두 채운 섬만 라우트를 만든다 (대전제 8.5).
 // 못 채운 섬은 목록에 '준비 중'과 문제 목록으로만 나오고 /islands/<섬_id> 는 404 다.
 //
 // 연결 파일은 원본을 re-export 하는 한 줄짜리라 원본 편집은 바로 핫 리로드된다.
 // 섬이나 라우트 파일을 새로 만들거나 지웠을 때만 다시 실행한다 (npm run sync:islands).
-// web/app/islands/(generated)/ 와 web/lib/islands.generated.ts 는 직접 고치지 않는다.
+// src/web/app/islands/(generated)/ 와 src/web/lib/islands.generated.ts 는 직접 고치지 않는다.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -20,8 +20,8 @@ import { parse } from "yaml";
 import { archipelagoWarnings, loadIsland } from "../../engine/src/index.ts";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const repoDir = path.resolve(webDir, "..");
-const islandsDir = path.join(repoDir, "islands");
+const sourceDir = path.resolve(webDir, "..");
+const islandsDir = path.join(sourceDir, "islands");
 const outDir = path.join(webDir, "app", "islands", "(generated)");
 const manifestFile = path.join(webDir, "lib", "islands.generated.ts");
 
@@ -31,7 +31,7 @@ const ROUTE_FILES = ["page", "layout", "loading", "error", "not-found", "templat
 const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js"];
 const ISLAND_ID = /^[a-z][a-z0-9_]*$/;
 
-const HEADER = "// 자동 생성 — 직접 고치지 않는다. (web/scripts/sync-island-routes.mjs)";
+const HEADER = "// 자동 생성 — 직접 고치지 않는다. (src/web/scripts/sync-island-routes.mjs)";
 
 // 플레이 가능한 섬의 조건 (대전제 8.5). 문제 목록이 비어 있어야 플레이할 수 있다.
 // island.yaml·locations/ 는 엔진이 스키마와 참조까지 검증한다.
@@ -91,7 +91,7 @@ function readIslandInfo(islandDir, islandId) {
   try {
     data = parse(fs.readFileSync(file, "utf8"));
   } catch (err) {
-    console.warn(`[sync-island-routes] ${posix(path.relative(repoDir, file))} 읽기 실패: ${err.message}`);
+    console.warn(`[sync-island-routes] ${posix(path.relative(sourceDir, file))} 읽기 실패: ${err.message}`);
     return info;
   }
   const text = (v) => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
@@ -113,7 +113,7 @@ function writeStub(islandId, webRoot, source) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
   const from = toImportPath(path.dirname(target), source);
-  const lines = [`// 자동 생성 — 직접 고치지 않는다. 원본: ${posix(path.relative(repoDir, source))}`];
+  const lines = [`// 자동 생성 — 직접 고치지 않는다. 원본: ${posix(path.relative(sourceDir, source))}`];
   // "use client" 모듈에서는 export * 를 쓸 수 없고, metadata 도 내보낼 수 없다.
   if (!isClientModule(source)) lines.push(`export * from "${from}";`);
   lines.push(`export { default } from "${from}";`, "");

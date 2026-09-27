@@ -1,4 +1,4 @@
-// islands/<섬_id>/assets/ 파일을 /islands/<섬_id>/assets/... 로 제공한다.
+// src/islands/<섬_id>/assets/ 파일을 /islands/<섬_id>/assets/... 로 제공한다.
 // 라우트는 sync-island-routes 가 플레이 가능한 섬마다 만든다.
 
 import fs from "node:fs/promises";

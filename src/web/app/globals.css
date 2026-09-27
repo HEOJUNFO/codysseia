@@ -1,5 +1,5 @@
 @import "tailwindcss";
-/* 섬 페이지(islands/<섬_id>/web/)의 클래스도 스캔한다 */
+/* 섬 페이지(src/islands/<섬_id>/web/)의 클래스도 스캔한다 */
 @source "../../islands";
 
 :root {

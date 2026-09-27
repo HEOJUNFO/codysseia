@@ -14,6 +14,8 @@ GM은 호스트의 Codex가 맡는다.
 
 ## 웹 실행
 
+게임 코드와 섬 데이터는 `src/` 아래에 있다: `src/engine`, `src/web`, `src/islands`, `src/schemas`. 프로젝트 지침과 문서는 루트의 `AGENTS.md`, `docs/`에 둔다.
+
 ```sh
 npm install
 npm run dev   # http://localhost:3000, 섬 페이지는 /islands/<섬_id>

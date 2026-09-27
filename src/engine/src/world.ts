@@ -1,5 +1,5 @@
-// 섬 폴더(islands/<섬_id>/)를 읽어 검증하고 엔진이 쓰는 World 로 만든다.
-// 스키마 검증(/schemas) + 섬 안 참조 검증(ID 접두사, 없는 지역을 가리키는 연결 등).
+// 섬 폴더(src/islands/<섬_id>/)를 읽어 검증하고 엔진이 쓰는 World 로 만든다.
+// 스키마 검증(src/schemas/) + 섬 안 참조 검증(ID 접두사, 없는 지역을 가리키는 연결 등).
 
 import fs from "node:fs";
 import path from "node:path";
