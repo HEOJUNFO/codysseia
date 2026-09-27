@@ -41,6 +41,8 @@
 .lobbyGrid { display: grid; grid-template-columns: minmax(220px, .39fr) minmax(0, 1fr); gap: clamp(28px, 4.5vw, 80px); align-items: stretch; }
 .gameMenu { display: flex; flex-direction: column; min-height: 440px; padding-top: 17px; }
 .menuItem { display: flex; align-items: center; gap: 18px; min-height: 66px; color: #d0d9d0; text-decoration: none; transition: color .2s ease, transform .2s ease; }
+.menuUnavailable { display: flex; align-items: center; width: 100%; min-height: 66px; padding: 0; border: 0; background: none; color: #8da095; text-align: left; cursor: not-allowed; }
+.menuUnavailable .menuItemText small { display: block; margin-top: 2px; color: #a8b8ad; font-size: 12px; font-weight: 400; }
 .menuItem:hover, .menuItem:focus-visible { color: #fff4d9; transform: translateX(9px); }
 .menuItemText strong { font-family: var(--font-display), Georgia, serif; font-size: clamp(22px, 2vw, 29px); font-weight: 600; letter-spacing: -.04em; }
 .menuItem svg { width: 17px; margin-left: auto; color: var(--gold); opacity: 0; transform: translateX(-8px); transition: opacity .2s ease, transform .2s ease; }
@@ -174,7 +176,7 @@
   .gameTitle h1 { font-size: 43px; }
   .lobbyGrid, .setupGrid, .waitingGrid { grid-template-columns: 1fr; gap: 18px; }
   .gameMenu { min-height: auto; padding: 0 0 8px; }
-  .menuItem { min-height: 52px; }
+  .menuItem, .menuUnavailable { min-height: 52px; }
   .menuItemText strong { font-size: 22px; }
   .menuFoot { margin: 11px 0 0; }
   .savePanel { min-height: 375px; padding: 25px 22px; }

@@ -35,11 +35,14 @@ function json(response, status, body, extraHeaders = {}) {
 }
 
 function localRequest(request) {
-  const address = (request.socket.remoteAddress ?? "").replace(/^::ffff:/, "");
-  if (address !== "127.0.0.1" && address !== "::1") return false;
+  const peer = (request.socket.remoteAddress ?? "").replace(/^::ffff:/, "");
+  const local = (request.socket.localAddress ?? "").replace(/^::ffff:/, "");
+  if (!peer || peer !== local) return false;
   try {
     const hostname = new URL(`http://${request.headers.host}`).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+    // 자신의 LAN IP로 연 페이지는 허용하고, 공개 도메인으로 들어온 프록시 요청은 거부한다.
+    return hostname === local || ((local === "127.0.0.1" || local === "::1") &&
+      (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"));
   } catch {
     return false;
   }

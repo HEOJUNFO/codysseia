@@ -39,7 +39,9 @@ export function RoomDashboard() {
         <div className={styles.gameTitle}><h1>멀티플레이</h1></div>
         <div className={styles.lobbyGrid}>
           <section className={styles.gameMenu} aria-label="협동 플레이 메뉴">
-            {local?.canHost !== false ? <Link href="/rooms/new" className={styles.menuItem}><span className={styles.menuItemText}><strong>방 만들기</strong></span><LobbyIcon name="arrow" size={20} /></Link> : null}
+            {local?.canHost === true
+              ? <Link href="/rooms/new" className={styles.menuItem}><span className={styles.menuItemText}><strong>방 만들기</strong></span><LobbyIcon name="arrow" size={20} /></Link>
+              : <button type="button" className={styles.menuUnavailable} disabled><span className={styles.menuItemText}><strong>방 만들기</strong><small>{local?.canHost === false ? "호스트 PC에서만 가능" : error ? "호스트 확인 실패" : "호스트 확인 중"}</small></span></button>}
             <Link href="/rooms/join" className={styles.menuItem}><span className={styles.menuItemText}><strong>IP로 참가</strong></span><LobbyIcon name="arrow" size={20} /></Link>
             <Link href="/" className={styles.menuItem}><span className={styles.menuItemText}><strong>군도 지도</strong></span><LobbyIcon name="arrow" size={20} /></Link>
             <p className={styles.menuFoot}><span className={styles.statusDot} /> 호스트 주소와 방 코드로 연결</p>
@@ -49,7 +51,7 @@ export function RoomDashboard() {
             <div className={styles.saveHeader}><h2 id="connection-title">직접 연결</h2></div>
             <p className={styles.connectIntro}>호스트에게 IP 주소와 방 코드를 받아 입력하세요. 같은 네트워크에서도, 인터넷에서도 접속 방법은 같습니다.</p>
             <Link href="/rooms/join" className={styles.connectAction}>호스트 IP 입력하기 <LobbyIcon name="arrow" size={18} /></Link>
-            <p className={styles.connectHint}>같은 네트워크: 192.168.0.12:3000<br />인터넷: 공개 IP:포트 또는 터널 주소</p>
+            <p className={styles.connectHint}>같은 네트워크: 호스트의 내부 IP:포트<br />인터넷: 공개 IP:포트 또는 터널 주소</p>
 
             {rooms.length > 0 ? <div className={styles.roomList}>
               {rooms.map((room) => {
