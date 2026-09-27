@@ -1,0 +1,13 @@
+.ship {
+  animation-name: voyage;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+@keyframes voyage {
+  to { transform: translate(var(--voyage-x), var(--voyage-y)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ship { animation-duration: 1ms !important; }
+}

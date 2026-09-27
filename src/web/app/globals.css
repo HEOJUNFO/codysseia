@@ -1,0 +1,28 @@
+@import "tailwindcss";
+/* 섬 페이지(src/islands/<섬_id>/web/)의 클래스도 스캔한다 */
+@source "../../islands";
+
+:root {
+  --background: #071316;
+  --foreground: #efece1;
+  --color-ink: #071316;
+  --color-surface: #102025;
+  --color-paper: #efece1;
+  --color-mist: #acbbb9;
+  --color-ember: #d8b979;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-ui);
+  --font-mono: ui-monospace, "Cascadia Mono", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-ui), "Malgun Gothic", sans-serif;
+}
+
+button, input, select, textarea { font: inherit; }

@@ -8,6 +8,18 @@
 여러 제작자가 각자 만든 섬을 파티가 자유롭게 탐험하는 디지털 TRPG. 게임 속 GM은 LLM 에이전트가 맡는다.
 모든 규약의 원본은 [`docs/00_대전제.md`](docs/00_대전제.md), 섬 제출 양식은 [`docs/01_섬_제작_템플릿.md`](docs/01_섬_제작_템플릿.md)다. 작업 전에 관련 절을 먼저 읽는다.
 
+## 작업별 문서 읽기
+
+이 파일을 읽은 다음, 작업에 해당하는 경로만 따라간다. 충돌하면 이 파일과 [대전제](docs/00_대전제.md)가 우선이다. `.scratch/`의 설계·이슈는 구현 범위와 미완료 사항을 설명하며, 대전제의 `[제안]`을 확정하지 않는다.
+
+| 작업 | 이어서 읽을 문서 |
+|---|---|
+| 섬 데이터·GM 지침·장면 제작 | [대전제 8장](docs/00_대전제.md) → [섬 제작 템플릿](docs/01_섬_제작_템플릿.md). 장면의 현재 공개 인터페이스는 [섬 플레이 인터페이스 검토](.scratch/island-play-interface/spec.md) |
+| 엔진·게임 상태·프로토콜·호스트 이전 | [대전제 2·8·9장](docs/00_대전제.md) → [멀티플레이 설계](.scratch/player-hosted-multiplayer/spec.md) → [현재 구현 경계와 남은 일](.scratch/architecture-cleanup/spec.md) |
+| 로비·웹 클라이언트 | [웹 지침](src/web/AGENTS.md) → [로비 현재 범위](.scratch/room-lobby/spec.md). 섬 장면이면 위 섬 제작 경로도 읽는다 |
+| Codex GM 연결·도구 | [대전제 2.1·2.4·9장](docs/00_대전제.md) → [GM 연결 설계](.scratch/gm-connection/spec.md) → [현재 멀티플레이 계약](.scratch/player-hosted-multiplayer/spec.md). 충돌하는 전송·턴 조율 초안은 마지막 문서와 현재 구현을 기준으로 재검토한다 |
+| 이슈·스펙·용어·ADR 작성 | [로컬 이슈 규칙](docs/agents/issue-tracker.md), [상태 표기](docs/agents/triage-labels.md), [도메인 문서 규칙](docs/agents/domain.md) 중 해당 문서 |
+
 ## 두 종류의 에이전트를 섞지 않는다
 
 | 구분 | 누구 | 무엇을 읽나 |
@@ -21,24 +33,43 @@
 ## 반드시 지킬 것
 
 - **엔진이 진실, GM은 서술자** (대전제 2.1). 주사위·수치·상태 변경은 엔진 코드와 GM 도구 호출로만 한다. 프롬프트나 서술로 수치를 정하지 않는다.
-- **섬은 데이터 패키지** (대전제 2.3). 섬 작업에서 `/engine`, `/gm`, `/schemas`, `/web`를 고치지 않는다. 필요하면 대전제 8.3 확장 절차로 이슈를 연다.
-- **섬 웹 페이지** (대전제 8.5 [제안]). 섬 전용 화면은 `islands/<섬_id>/web/`에만 만든다 (`/islands/<섬_id>` 경로). 화면만 담당하고 상태 변경은 엔진 API로만 한다. 섬 장면은 `@codysseia/play`(`useGameState`, `useMove`, `useSendAction`, 지도 부품 `LocationView`·`IslandMap`·`ArchipelagoMap`)만 import 한다. 섬 이미지·소리는 `islands/<섬_id>/assets/`. `web/app/islands/(generated)/`는 `web/scripts/sync-island-routes.mjs`가 생성하므로 직접 고치지 않는다.
-- **남의 섬은 건드리지 않는다.** 요청받은 섬 폴더(`islands/<섬_id>/`) 밖은 읽기만 한다. 다른 섬은 공개 훅(`hooks.yaml`)에 있는 것만 참조한다.
+- **섬은 데이터 패키지** (대전제 2.3). 섬 작업에서 `/src/engine`, `/src/gm`, `/src/schemas`, `/src/web`를 고치지 않는다. 필요하면 대전제 8.3 확장 절차로 이슈를 연다.
+- **섬 웹 페이지** (대전제 8.5 [제안]). 섬 전용 화면은 `src/islands/<섬_id>/web/`에만 만든다 (`/islands/<섬_id>` 경로). 화면만 담당하고 상태 변경은 엔진 API로만 한다. 섬 장면은 `@codysseia/play`의 공개 훅·지도 부품만 import 한다. 사용법은 `docs/01_섬_제작_템플릿.md` 12절을 따른다. 섬 이미지·소리는 `src/islands/<섬_id>/assets/`. `src/web/app/islands/(generated)/`는 `src/web/scripts/sync-island-routes.mjs`가 생성하므로 직접 고치지 않는다.
+- **남의 섬은 건드리지 않는다.** 요청받은 섬 폴더(`src/islands/<섬_id>/`) 밖은 읽기만 한다. 다른 섬은 공개 훅(`hooks.yaml`)에 있는 것만 참조한다.
 - **ID 접두사** (대전제 8.2). 모든 ID와 플래그는 `<섬_id>.` 으로 시작한다.
-- `docs/00_대전제.md`, `/schemas`, `/engine`, `/gm`, `/web` 변경은 PR + 전원 합의 대상이다. 에이전트가 임의로 [제안]을 [확정]으로 바꾸지 않는다.
+- `docs/00_대전제.md`, `/src/schemas`, `/src/engine`, `/src/gm`, `/src/web` 변경은 PR + 전원 합의 대상이다. 에이전트가 임의로 [제안]을 [확정]으로 바꾸지 않는다.
 - **Codex 로그인 토큰을 코드에서 다루지 않는다.** 게임 코드는 공식 `codex` 실행 파일만 호출한다. `~/.codex/auth.json`을 읽거나 토큰을 꺼내 직접 API를 부르는 코드는 만들지 않는다.
 - 비밀값이 생기면 `.env`에만 둔다. `.env.example`에 키 이름만 적는다.
+
+## 정리 기능
+
+사용자가 `정리 기능`을 명령하면 현재 요구사항을 기준으로 다음 항목을 모두 감사하고 제거하거나 개선한다.
+
+- 폴백·레거시·중복·데드 코드
+- 비효율적인 알고리즘과 불필요한 상태
+- 알고리즘상 불필요한 데이터 복사
+
+정리할 때는 다음을 지킨다.
+
+- 데이터 전체 복사는 금지한다. 필요한 범위만 증분 처리한다(증분을 사랑하라).
+- 상태 변화, 준비 완료, 작업 완료를 감지하기 위한 타이머 기반 폴링은 금지한다.
+- 금지 대상에는 `setTimeout(0)` 재귀, `setInterval`, 임의 지연 재시도, `requestAnimationFrame` 또는 마이크로태스크를 이용한 반복 확인이 포함된다.
+- 후속 작업은 실제 publication·completion·readiness 이벤트 또는 명시적인 상태 전이 신호가 정확히 한 번 구동해야 한다.
 
 ## 폴더
 
 ```
 AGENTS.md / CLAUDE.md   에이전트 공통 지침 (이 파일)
 docs/                   대전제, 템플릿, 설계 문서, 참고 자료
-schemas/                데이터 JSON Schema
-engine/                 코어 엔진 (판정, 상태, 전투, 이동) — TypeScript, 테스트: npm test
-gm/                     게임 속 GM (프롬프트, 도구 연결, 공급자)
-web/                    웹 클라이언트 (Next.js App Router, npm 워크스페이스)
-islands/<섬_id>/        각자의 섬 (web/ 에 섬 전용 장면)
+src/schemas/            데이터 JSON Schema
+src/engine/             코어 엔진 (판정, 상태, 전투, 이동) — TypeScript, 테스트: npm test
+src/catalog/            섬 패키지 검증·목록 파일 어댑터
+src/game/               방 게임 상태·턴·승인된 섬 행동
+src/host/               플레이어 호스트와 로비 전송 어댑터
+src/protocol/           게임 상태·명령·이벤트 직렬화 계약
+src/gm/                 게임 속 GM (프롬프트, 도구 연결, 공급자; 구현 예정)
+src/web/                웹 클라이언트 (Next.js App Router, npm 워크스페이스)
+src/islands/<섬_id>/    각자의 섬 (web/ 에 섬 전용 장면)
 tools/                  개발 보조 도구 설정 (메모리 서버 등)
 .agents/skills/         개발 에이전트 스킬 (Codex가 읽는 원본)
 .claude/skills/         Claude Code용 — .agents/skills 로의 심볼릭 링크 + Claude 전용 스킬
@@ -68,7 +99,7 @@ tools/                  개발 보조 도구 설정 (메모리 서버 등)
 - mattpocock 스킬의 이슈·스펙은 `.scratch/<작업>/` 마크다운으로 관리하고 커밋한다. 규칙: `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, 도메인 문서 규칙: `docs/agents/domain.md`.
 - hyperframes는 핵심 스킬만 설치해 두었다. 작업 흐름 스킬(motion-graphics, general-video 등)은 쓸 때 `npx hyperframes skills update <이름>`으로 추가된다. 계속 쓸 것이면 추가된 폴더와 `skills-lock.json`을 커밋하고, 이름이 겹치는 `figma` 스킬은 설치하지 않는다 (Figma 플러그인 스킬과 충돌).
 - 섬 제작용 스킬이 만든 이미지·소리는 해당 섬의 `assets/`에만 둔다. 스킬 자체는 섬 폴더에 복사하지 않는다.
-- GM용 스킬(예: 판정 규칙 조회, 섬 로더)을 만들면 개발용과 섞이지 않게 `gm/skills/`에 둔다.
+- GM용 스킬(예: 판정 규칙 조회, 섬 로더)을 만들면 개발용과 섞이지 않게 `src/gm/skills/`에 둔다.
 
 ## gstack (권장)
 
@@ -101,7 +132,7 @@ cd ~/.claude/skills/gstack && ./setup --host codex  # Codex도 쓰면
 - 은행(bank)은 서로 완전히 격리된다. 캠페인마다 은행을 따로 쓴다. 섬 제작용 메모와 캠페인 기록을 한 은행에 섞지 않는다.
 - 메모리는 **서술 참고용**이다. HP·인벤토리·플래그의 원본은 엔진 상태이며 메모리에서 수치를 되살리지 않는다.
 - 기억 추출도 호스트의 Codex 로그인(`openai-codex` 공급자)을 쓴다. GM용 로그인과 토큰이 꼬이지 않게 전용 `CODEX_HOME`(`~/.tragic_trpg/hindsight-codex`)을 쓴다.
-- 게임 속 GM에는 같은 MCP 주소를 붙인다. 연결 방식은 `/gm` 설계 때 정한다.
+- 게임 속 GM에는 같은 MCP 주소를 붙인다. 연결 방식은 `/src/gm` 설계 때 정한다.
 - 웹 UI(선택): `npx @vectorize-io/hindsight-control-plane --port 9999 --api-url http://localhost:8888`
 
 ## 지식그래프 (graphify)
