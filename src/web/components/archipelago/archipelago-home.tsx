@@ -16,7 +16,7 @@ export function ArchipelagoHome({ islands, party, roomId, canLead, travelOptions
   party: HomeParty;
   roomId?: string;
   canLead: boolean;
-  travelOptions: Moves["islands"];
+  travelOptions: ReadonlyArray<Readonly<Moves["islands"][number]>>;
   onTravel: (islandId: string) => void;
   pending: boolean;
 }) {

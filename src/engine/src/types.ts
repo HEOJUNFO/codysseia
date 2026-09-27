@@ -16,6 +16,8 @@ export type IslandDef = {
   /** 섬을 떠날 수 있는 지역. 비어 있으면 entryLocation 만. */
   departureLocations: LocationId[];
   entryRequiresFlags: FlagId[];
+  /** 장면 진행 방식. 전투 선공 및 행동 횟수와는 별개다. */
+  turnMode?: "free" | "ordered";
   /** 군도 지도 위 위치 (제작자가 고른다) */
   position: Point;
   /** 섬 지도 배경. 섬 폴더 기준 assets/ 경로 */

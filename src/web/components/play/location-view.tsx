@@ -7,9 +7,10 @@ import { useGameState, useMove, usePlayIdentity } from "@/lib/play/provider";
 import { chipClass, MapStage, Marker, Unplaced } from "./map-stage";
 
 export function LocationView({ image }: { /** 기본값: 지역 yaml 의 image */ image?: string }) {
-  const { locationView, party, pending, place } = useGameState();
+  const { locationView, party, pending, place, turn } = useGameState();
   const move = useMove();
   const characterId = usePlayIdentity().characterId;
+  const canMove = !pending && (turn.mode === "free" || turn.activeCharacterId === characterId);
   const movers = [characterId];
   const placed = locationView.spots.filter((s) => s.position);
   const unplacedSpots = locationView.spots.filter((s) => !s.position);
@@ -30,7 +31,7 @@ export function LocationView({ image }: { /** 기본값: 지역 yaml 의 image *
                   point={spot.position!}
                   label={spot.name}
                   tone={here.length > 0 ? "current" : "open"}
-                  onSelect={pending ? undefined : () => move.toSpot(spot.id, movers)}
+                  onSelect={canMove ? () => move.toSpot(spot.id, movers) : undefined}
                 />
                 {here.map((c, i) => (
                   <g key={c.id} transform={`translate(${x + (i - (here.length - 1) / 2) * u * 3} ${y + u * 3})`}>
@@ -51,7 +52,7 @@ export function LocationView({ image }: { /** 기본값: 지역 yaml 의 image *
       {locationView.spots.length > 0 && unplacedSpots.length + idle.length > 0 ? (
         <Unplaced title="지점">
           {unplacedSpots.map((s) => (
-            <button key={s.id} className={chipClass} disabled={pending} onClick={() => move.toSpot(s.id, movers)}>
+            <button key={s.id} className={chipClass} disabled={!canMove} onClick={() => move.toSpot(s.id, movers)}>
               {s.name}
               {party.some((c) => c.spotId === s.id) ? ` · ${party.filter((c) => c.spotId === s.id).map((c) => c.name).join(", ")}` : ""}
             </button>

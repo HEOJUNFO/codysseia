@@ -6,6 +6,7 @@ import { GMLog } from "./gm-log";
 import { LocationPanel } from "./location-panel";
 import { PartyStatus } from "./party-status";
 import { SceneArea } from "./scene-area";
+import { TurnStatus } from "./turn-status";
 import styles from "./play-ui.module.css";
 
 export function PlayFrame({ children }: { children: React.ReactNode }) {
@@ -14,6 +15,7 @@ export function PlayFrame({ children }: { children: React.ReactNode }) {
       <SceneArea>{children}</SceneArea>
       <aside className={styles.sidebar}>
         <LocationPanel />
+        <TurnStatus />
         <PartyStatus />
       </aside>
       <section className={styles.dialogue}>

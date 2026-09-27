@@ -13,12 +13,14 @@ import {
   type World,
 } from "@codysseia/engine";
 import { applyIslandPatch, copyJson, copyJsonObject, normalizeIslandPatch } from "../protocol/island-state.ts";
-import type { Character, GameChange, GameCommand, GameState, IslandPatch, IslandState, LogEntry, MoveRequest, SceneState, Voyage } from "../protocol/play.ts";
+import type { Character, GameChange, GameCommand, GameState, IslandPatch, IslandState, LogEntry, MoveRequest, SceneState, TurnState, Voyage } from "../protocol/play.ts";
 import type { IslandActionHandler } from "./action-handler.ts";
+import { advanceTurn, initialTurn, transitionTurn } from "./turn.ts";
 
 type RoomMember = { id: string; name: string; role: "host" | "player" };
 type Outcome = { ok: true; event: GameChange | null } | { ok: false; error: string };
 type AssetUrl = (islandId: string, asset: string | undefined) => string | null;
+type PublishableChange = { [Kind in GameChange["kind"]]: Omit<Extract<GameChange, { kind: Kind }>, "type" | "revision"> }[GameChange["kind"]];
 
 function formatHours(hours: number): string {
   const days = Math.floor(hours / 24);
@@ -39,10 +41,11 @@ export class GameRoom {
   #events: GameChange[] = [];
   #results = new Map<string, { ok: true } | { ok: false; error: string }>();
   #voyage: Voyage | null = null;
+  #turn: TurnState;
   #closed = false;
   #commandQueue: Promise<void> = Promise.resolve();
 
-  constructor(world: World, startIslandId: string, members: Iterable<RoomMember>, assetUrl: AssetUrl, rules: ReadonlyMap<string, IslandActionHandler> = new Map()) {
+  constructor(world: World, startIslandId: string, members: Iterable<RoomMember>, assetUrl: AssetUrl, rules: ReadonlyMap<string, IslandActionHandler>) {
     this.#world = world;
     this.#assetUrl = assetUrl;
     this.#rules = rules;
@@ -61,7 +64,9 @@ export class GameRoom {
       });
     }
     this.#islands = Object.values(world.islands).sort((a, b) => a.id.localeCompare(b.id));
-    this.#engine = startGame(world, Array.from(this.#characters.values(), (character) => character.id), startIslandId);
+    const characterIds = Array.from(this.#characterIds());
+    this.#engine = startGame(world, characterIds, startIslandId);
+    this.#turn = initialTurn(world.islands[startIslandId].turnMode ?? "free", characterIds);
     this.#ensureIslandState(startIslandId);
     this.#addLog("system", "엔진 연결됨 · GM 미연결 — 현재 서술은 임시 문장입니다.");
     this.#arrival(this.#engine.party.locationId, true);
@@ -75,8 +80,12 @@ export class GameRoom {
     return this.#characters.get(memberId)?.id ?? null;
   }
 
+  *#characterIds(): IterableIterator<string> {
+    for (const character of this.#characters.values()) yield character.id;
+  }
+
   snapshot(): GameState {
-    return { ...this.#scene(), inventory: [], log: this.#log, islandState: this.#currentIslandState(), pending: false };
+    return { ...this.#scene(), inventory: [], log: this.#log, islandState: this.#currentIslandState(), turn: this.#turn, pending: false };
   }
 
   replay(from: number, to: number): Iterable<GameChange> | null {
@@ -108,6 +117,7 @@ export class GameRoom {
       outcome = command?.kind === "move" ? this.#move(member, command.request)
         : command?.kind === "act" ? this.#act(member, command.text)
         : command?.kind === "island" ? await this.#islandAction(member, command.action, command.payload)
+        : command?.kind === "end_turn" ? this.#endTurn(member)
         : { ok: false, error: "알 수 없는 게임 명령입니다." };
     } catch (error) {
       outcome = { ok: false, error: error instanceof Error ? error.message : "게임 명령을 처리하지 못했습니다." };
@@ -132,6 +142,7 @@ export class GameRoom {
       if (!ownCharacter || !Array.isArray(request.characterIds) || request.characterIds.length !== 1 || request.characterIds[0] !== ownCharacter) {
         return { ok: false, error: "자신의 캐릭터만 이동할 수 있습니다." };
       }
+      if (this.#turn.mode === "ordered" && this.#turn.activeCharacterId !== ownCharacter) return { ok: false, error: "자신의 턴에만 이동할 수 있습니다." };
       if (request.spotId !== null && typeof request.spotId !== "string") return { ok: false, error: "이동할 지점이 올바르지 않습니다." };
       result = moveToSpot(this.#world, this.#engine, ownCharacter, request.spotId);
     } else {
@@ -141,6 +152,7 @@ export class GameRoom {
     if (request.kind === "island") this.#ensureIslandState(request.islandId);
     const previous = this.#engine;
     this.#engine = result.state;
+    if (request.kind === "island") this.#turn = initialTurn(this.#world.islands[request.islandId].turnMode ?? "free", this.#characterIds());
     if (request.kind === "spot") {
       return { ok: true, event: this.#publish({ kind: "spot", characterId: request.characterIds[0], spotId: request.spotId }) };
     }
@@ -153,7 +165,7 @@ export class GameRoom {
         : { kind: "delta", ...islandMapDelta(this.#world, previous, result.state) },
       visitedAdded: result.state.visited.slice(previous.visited.length),
       discoveredAdded: result.state.discovered.slice(previous.discovered.length),
-      ...(request.kind === "island" ? { time: result.state.time, voyage: this.#voyage ?? undefined, islandState: this.#currentIslandState() } : {}),
+      ...(request.kind === "island" ? { time: result.state.time, voyage: this.#voyage ?? undefined, islandState: this.#currentIslandState(), turn: this.#turn } : {}),
       logEntries,
     }) };
   }
@@ -164,11 +176,19 @@ export class GameRoom {
     if (!text || text.length > 1000) return { ok: false, error: "행동은 1~1000자로 입력하세요." };
     const travel = /^\/move\s+([a-z][a-z0-9_]*)$/.exec(text);
     if (travel) return this.#move(member, { kind: "island", islandId: travel[1] });
+    if (this.#turn.mode === "ordered" && this.#turn.activeCharacterId !== this.characterFor(member.id)) return { ok: false, error: "자신의 턴에만 행동할 수 있습니다." };
     const logEntries = [
       this.#addLog("player", `${member.name}: ${text}`),
       this.#addLog("gm", `(가짜 GM) "${text}" — GM이 연결되면 여기에 서술이 나옵니다.`),
     ];
     return { ok: true, event: this.#publish({ kind: "log", logEntries }) };
+  }
+
+  #endTurn(member: RoomMember): Outcome {
+    if (this.#turn.mode !== "ordered") return { ok: false, error: "진행 중인 순서 턴이 없습니다." };
+    if (this.#turn.activeCharacterId !== this.characterFor(member.id) && member.role !== "host") return { ok: false, error: "자신의 턴만 종료할 수 있습니다." };
+    this.#turn = advanceTurn(this.#turn);
+    return { ok: true, event: this.#publish({ kind: "turn", turn: this.#turn }) };
   }
 
   async #islandAction(member: RoomMember, action: string, payload: unknown): Promise<Outcome> {
@@ -188,6 +208,7 @@ export class GameRoom {
         time: this.#engine.time,
         party: this.#party(),
         state,
+        turn: this.#turn,
       }, action, copyJson(payload));
     if (this.#closed) return { ok: false, error: "방이 종료되었습니다." };
     if (!result || !Array.isArray(result.patches)) throw new Error("섬 규칙의 결과가 올바르지 않습니다.");
@@ -202,10 +223,14 @@ export class GameRoom {
     if (!Array.isArray(messages) || messages.length > 20 || messages.some((message) => typeof message !== "string" || message.length > 1000)) {
       throw new Error("섬 규칙의 메시지가 올바르지 않습니다.");
     }
-    this.#islandStates.set(islandId, nextState);
-    if (patches.length === 0 && messages.length === 0) return { ok: true, event: null };
+    const nextTurn = result.turn === undefined ? this.#turn : transitionTurn(this.#turn, result.turn, this.#characterIds());
+    if (nextState !== state) this.#islandStates.set(islandId, nextState);
+    this.#turn = nextTurn;
+    if (patches.length === 0 && messages.length === 0) {
+      return { ok: true, event: result.turn === undefined ? null : this.#publish({ kind: "turn", turn: nextTurn }) };
+    }
     const logEntries = messages.map((message) => this.#addLog("system", message));
-    return { ok: true, event: this.#publish({ kind: "island_patch", patches, logEntries }) };
+    return { ok: true, event: this.#publish({ kind: "island_patch", patches, ...(result.turn === undefined ? {} : { turn: nextTurn }), logEntries }) };
   }
 
   #ensureIslandState(islandId: string): IslandState {
@@ -225,7 +250,7 @@ export class GameRoom {
     return this.#ensureIslandState(this.#engine.party.islandId);
   }
 
-  #publish(change: Omit<Extract<GameChange, { kind: "scene" }>, "type" | "revision"> | Omit<Extract<GameChange, { kind: "spot" }>, "type" | "revision"> | Omit<Extract<GameChange, { kind: "log" }>, "type" | "revision"> | Omit<Extract<GameChange, { kind: "island_patch" }>, "type" | "revision">): GameChange {
+  #publish(change: PublishableChange): GameChange {
     const event = { type: "game_changed", revision: this.#events.length + 1, ...change } as GameChange;
     this.#events.push(event);
     return event;

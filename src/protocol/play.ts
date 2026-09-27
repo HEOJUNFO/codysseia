@@ -25,6 +25,9 @@ export type LogEntry = {
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 export type JsonObject = { [key: string]: JsonValue };
+export type DeepReadonly<T> = T extends readonly (infer Entry)[] ? readonly DeepReadonly<Entry>[]
+  : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+  : T;
 
 /** 현재 섬의 공개 확장 상태. 호스트는 섬별 상태를 방이 닫힐 때까지 유지한다. */
 export type IslandState = {
@@ -32,6 +35,11 @@ export type IslandState = {
   shared: JsonObject;
   players: Record<string, JsonObject>;
 };
+
+/** 자유 진행 또는 엔진이 소유하는 순서 턴. 전투의 판정·행동 횟수는 별도 코어 규칙이다. */
+export type TurnState =
+  | { readonly mode: "free" }
+  | { readonly mode: "ordered"; readonly round: number; readonly order: readonly string[]; readonly activeCharacterId: string };
 
 export type IslandPatch =
   | { target: "shared"; path: string[]; op: "set"; value: JsonValue }
@@ -108,6 +116,7 @@ export type GameState = {
   voyage: Voyage | null;
   log: LogEntry[];
   islandState: IslandState;
+  turn: TurnState;
   /** 엔진·GM 응답을 기다리는 중 */
   pending: boolean;
 };
@@ -120,7 +129,8 @@ export type MoveRequest =
 export type GameCommand =
   | { kind: "move"; request: MoveRequest }
   | { kind: "act"; text: string }
-  | { kind: "island"; action: string; payload: JsonValue };
+  | { kind: "island"; action: string; payload: JsonValue }
+  | { kind: "end_turn" };
 
 export type SceneState = Pick<GameState,
   "party" | "place" | "moves" | "visited" | "discovered" | "archipelago" |
@@ -141,11 +151,13 @@ export type GameChange =
       time?: number;
       voyage?: Voyage;
       islandState?: IslandState;
+      turn?: TurnState;
       logEntries: LogEntry[];
     }
   | { type: "game_changed"; revision: number; kind: "spot"; characterId: string; spotId: string | null }
   | { type: "game_changed"; revision: number; kind: "log"; logEntries: LogEntry[] }
-  | { type: "game_changed"; revision: number; kind: "island_patch"; patches: IslandPatch[]; logEntries: LogEntry[] };
+  | { type: "game_changed"; revision: number; kind: "island_patch"; patches: IslandPatch[]; turn?: TurnState; logEntries: LogEntry[] }
+  | { type: "game_changed"; revision: number; kind: "turn"; turn: TurnState };
 
 export type GameSnapshotMessage = {
   type: "game_snapshot";

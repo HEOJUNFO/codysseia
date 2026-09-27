@@ -7,7 +7,7 @@ import { selectMemberRoom } from "@/lib/lobby/select-room";
 import type { LocalRooms } from "@/lib/lobby/types";
 import { RevisionStream } from "@/lib/revision-stream";
 import { applyIslandPatch } from "../../../protocol/island-state";
-import type { GameChange, GameCommand, GameResumeMessage, GameSnapshotMessage, GameState, MoveRequest } from "./types";
+import type { DeepReadonly, GameChange, GameCommand, GameResumeMessage, GameSnapshotMessage, GameState, JsonObject, JsonValue, MoveRequest, TurnState } from "./types";
 
 type Mover = {
   toLocation: (locationId: string) => void;
@@ -18,6 +18,8 @@ type Mover = {
 type PlayContextValue = {
   state: GameState;
   sendAction: (text: string) => void;
+  sendIslandAction: (action: string, payload: JsonValue) => void;
+  endTurn: () => void;
   move: Mover;
   identity: { roomId: string; role: "host" | "player"; characterId: string };
 };
@@ -72,14 +74,16 @@ function applyChange(state: GameState, change: GameChange): GameState {
       time: change.time ?? state.time,
       voyage: change.voyage ?? state.voyage,
       islandState: change.islandState ?? state.islandState,
+      turn: change.turn ?? state.turn,
       log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log,
     };
   }
   if (change.kind === "island_patch") {
     let islandState = state.islandState;
     for (const patch of change.patches) islandState = applyIslandPatch(islandState, patch);
-    return { ...state, islandState, log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log };
+    return { ...state, islandState, turn: change.turn ?? state.turn, log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log };
   }
+  if (change.kind === "turn") return { ...state, turn: change.turn };
   return { ...state, log: [...state.log, ...change.logEntries] };
 }
 
@@ -239,6 +243,8 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
     state: { ...snapshot, pending: pending || synchronizing || !connected },
     identity,
     sendAction: (text) => { if (text.trim()) send({ kind: "act", text }); },
+    sendIslandAction: (action, payload) => send({ kind: "island", action, payload }),
+    endTurn: () => send({ kind: "end_turn" }),
     move: {
       toLocation: (locationId) => move({ kind: "location", locationId }),
       toSpot: (spotId, characterIds) => move({ kind: "spot", spotId, characterIds: characterIds?.length ? characterIds : [identity.characterId] }),
@@ -263,7 +269,14 @@ function usePlay(): PlayContextValue {
   return context;
 }
 
-export function useGameState(): GameState { return usePlay().state; }
+export function useGameState(): DeepReadonly<GameState> { return usePlay().state; }
 export function useSendAction(): (text: string) => void { return usePlay().sendAction; }
 export function useMove(): Mover { return usePlay().move; }
 export function usePlayIdentity(): PlayContextValue["identity"] { return usePlay().identity; }
+export function useIslandAction(): PlayContextValue["sendIslandAction"] { return usePlay().sendIslandAction; }
+export function useTurnState(): TurnState { return usePlay().state.turn; }
+export function useEndTurn(): () => void { return usePlay().endTurn; }
+export function useIslandPlayerState(characterId?: string): DeepReadonly<JsonObject> | null {
+  const { state, identity } = usePlay();
+  return state.islandState.players[characterId ?? identity.characterId] ?? null;
+}

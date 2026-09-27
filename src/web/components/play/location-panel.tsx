@@ -14,9 +14,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function LocationPanel() {
-  const { place, moves, pending, inCombat, time } = useGameState();
+  const { place, moves, pending, inCombat, time, turn } = useGameState();
   const move = useMove();
-  const canLead = usePlayIdentity().role === "host";
+  const identity = usePlayIdentity();
+  const canLead = identity.role === "host";
+  const canMoveSpot = !pending && (turn.mode === "free" || turn.activeCharacterId === identity.characterId);
   if (!place) return <p>플레이할 수 있는 섬이 없다.</p>;
 
   return (
@@ -31,7 +33,7 @@ export function LocationPanel() {
       {moves.spots.length > 0 ? (
         <Section title="지점">
           {moves.spots.map((s) => (
-            <button key={s.id} className={styles.chip} disabled={pending} onClick={() => move.toSpot(s.id)}>
+            <button key={s.id} className={styles.chip} disabled={!canMoveSpot} onClick={() => move.toSpot(s.id)}>
               {s.name}
             </button>
           ))}

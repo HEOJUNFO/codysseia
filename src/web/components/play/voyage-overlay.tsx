@@ -27,7 +27,7 @@ export function VoyageOverlay() {
   return <Playback key={voyage.id} voyage={voyage} islands={archipelago} onDone={finish} />;
 }
 
-function Playback({ voyage, islands, onDone }: { voyage: Voyage; islands: ArchipelagoIsland[]; onDone: () => void }) {
+function Playback({ voyage, islands, onDone }: { voyage: Voyage; islands: readonly Readonly<ArchipelagoIsland>[]; onDone: () => void }) {
   const ms = playMs(voyage);
   const { from, to } = voyage;
 

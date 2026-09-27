@@ -16,6 +16,7 @@ type RawIsland = {
   entry_location: string;
   departure_locations?: string[];
   entry_requires_flags?: string[];
+  turn_mode?: "free" | "ordered";
   safe_zones?: string[];
   archipelago_position: Point;
   map_image?: string;
@@ -147,6 +148,7 @@ export function loadIsland(islandDir: string): LoadedIsland {
       entryLocation: raw.entry_location,
       departureLocations: raw.departure_locations ?? [],
       entryRequiresFlags: raw.entry_requires_flags ?? [],
+      turnMode: raw.turn_mode ?? "free",
       position: raw.archipelago_position,
       mapImage: raw.map_image,
     };

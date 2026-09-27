@@ -16,8 +16,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse } from "yaml";
-import { archipelagoWarnings, loadIsland } from "../../engine/src/index.ts";
+import { loadIslandCatalog, WEB_EXTENSIONS } from "../../catalog/island-catalog.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = path.resolve(webDir, "..");
@@ -28,8 +27,6 @@ const manifestFile = path.join(webDir, "lib", "islands.generated.ts");
 // 섬이 쓸 수 있는 App Router 파일. route.ts(API)는 넣지 않는다.
 // 섬 페이지가 서버 코드로 게임 상태를 바꾸지 못하게 하기 위해서다 (대전제 2.1).
 const ROUTE_FILES = ["page", "layout", "loading", "error", "not-found", "template"];
-const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js"];
-const ISLAND_ID = /^[a-z][a-z0-9_]*$/;
 
 const HEADER = "// 자동 생성 — 직접 고치지 않는다. (src/web/scripts/sync-island-routes.mjs)";
 const expectedFiles = new Set();
@@ -52,17 +49,6 @@ function removeStaleGenerated(dir) {
       fs.unlinkSync(target);
     }
   }
-}
-
-// 플레이 가능한 섬의 조건 (대전제 8.5). 문제 목록이 비어 있어야 플레이할 수 있다.
-// island.yaml·locations/ 는 엔진이 스키마와 참조까지 검증한다.
-function checkIsland(dir) {
-  const problems = [];
-  if (!fs.existsSync(path.join(dir, "gm.md"))) problems.push("gm.md 없음");
-  if (!EXTENSIONS.some((ext) => fs.existsSync(path.join(dir, "web", `page${ext}`)))) problems.push("web/page.tsx 없음");
-  const loaded = loadIsland(dir);
-  problems.push(...loaded.errors);
-  return { problems, island: loaded.island };
 }
 
 function writeAssetRoute(islandId) {
@@ -95,36 +81,11 @@ function findRouteFiles(dir) {
       continue;
     }
     const ext = path.extname(entry.name);
-    if (EXTENSIONS.includes(ext) && ROUTE_FILES.includes(path.basename(entry.name, ext))) {
+    if (WEB_EXTENSIONS.includes(ext) && ROUTE_FILES.includes(path.basename(entry.name, ext))) {
       found.push(full);
     }
   }
   return found;
-}
-
-// 섬 목록·메인 군도 지도에 보여줄 소개. 준비 중인 섬도 island.yaml 을 읽을 수 있는 만큼 읽는다.
-function readIslandInfo(islandDir, islandId) {
-  const info = { name: islandId, author: null, concept: null, tone: null, recommendedLevel: null, position: null };
-  const file = path.join(islandDir, "island.yaml");
-  if (!fs.existsSync(file)) return info;
-  let data;
-  try {
-    data = parse(fs.readFileSync(file, "utf8"));
-  } catch (err) {
-    console.warn(`[sync-island-routes] ${posix(path.relative(sourceDir, file))} 읽기 실패: ${err.message}`);
-    return info;
-  }
-  const text = (v) => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
-  const pos = data?.archipelago_position;
-  const inRange = (n) => typeof n === "number" && n >= 0 && n <= 100;
-  return {
-    name: text(data?.name) ?? islandId,
-    author: text(data?.author),
-    concept: text(data?.concept),
-    tone: text(data?.tone),
-    recommendedLevel: text(data?.recommended_level),
-    position: inRange(pos?.x) && inRange(pos?.y) ? { x: pos.x, y: pos.y } : null,
-  };
 }
 
 function writeStub(islandId, webRoot, source) {
@@ -140,36 +101,16 @@ function writeStub(islandId, webRoot, source) {
 }
 
 function sync() {
-  const islands = [];
-  const loadedIslands = [];
-  const skipped = [];
-  const entries = fs.existsSync(islandsDir) ? fs.readdirSync(islandsDir, { withFileTypes: true }) : [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (!ISLAND_ID.test(entry.name)) {
-      skipped.push(entry.name);
-      continue;
-    }
-
-    const id = entry.name;
-    const islandDir = path.join(islandsDir, id);
-    const { problems, island } = checkIsland(islandDir);
-    const playable = problems.length === 0;
-    if (playable) {
-      const webRoot = path.join(islandDir, "web");
-      for (const file of findRouteFiles(webRoot)) writeStub(id, webRoot, file);
-      if (fs.existsSync(path.join(islandDir, "assets"))) writeAssetRoute(id);
-      loadedIslands.push(island);
-    }
-    islands.push({ id, ...readIslandInfo(islandDir, id), playable, problems, warnings: [] });
+  const { islands, skipped } = loadIslandCatalog(islandsDir);
+  for (const island of islands) {
+    if (!island.playable) continue;
+    const islandDir = path.join(islandsDir, island.id);
+    const webRoot = path.join(islandDir, "web");
+    for (const file of findRouteFiles(webRoot)) writeStub(island.id, webRoot, file);
+    if (fs.existsSync(path.join(islandDir, "assets"))) writeAssetRoute(island.id);
   }
-
-  const warnings = archipelagoWarnings(loadedIslands);
-  for (const entry of islands) entry.warnings = warnings[entry.id] ?? [];
   removeStaleGenerated(outDir);
 
-  islands.sort((a, b) => a.id.localeCompare(b.id));
   writeGenerated(
     manifestFile,
     [

@@ -2,6 +2,7 @@
 export type {
   ArchipelagoIsland,
   Character,
+  DeepReadonly,
   GameChange,
   GameCommand,
   GameSnapshotMessage,
@@ -20,5 +21,6 @@ export type {
   Place,
   Point,
   SceneState,
+  TurnState,
   Voyage,
 } from "../../../protocol/play";

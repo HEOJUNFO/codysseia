@@ -22,7 +22,7 @@
 
 - **엔진이 진실, GM은 서술자** (대전제 2.1). 주사위·수치·상태 변경은 엔진 코드와 GM 도구 호출로만 한다. 프롬프트나 서술로 수치를 정하지 않는다.
 - **섬은 데이터 패키지** (대전제 2.3). 섬 작업에서 `/src/engine`, `/src/gm`, `/src/schemas`, `/src/web`를 고치지 않는다. 필요하면 대전제 8.3 확장 절차로 이슈를 연다.
-- **섬 웹 페이지** (대전제 8.5 [제안]). 섬 전용 화면은 `src/islands/<섬_id>/web/`에만 만든다 (`/islands/<섬_id>` 경로). 화면만 담당하고 상태 변경은 엔진 API로만 한다. 섬 장면은 `@codysseia/play`(`useGameState`, `useMove`, `useSendAction`, 지도 부품 `LocationView`·`IslandMap`·`ArchipelagoMap`)만 import 한다. 섬 이미지·소리는 `src/islands/<섬_id>/assets/`. `src/web/app/islands/(generated)/`는 `src/web/scripts/sync-island-routes.mjs`가 생성하므로 직접 고치지 않는다.
+- **섬 웹 페이지** (대전제 8.5 [제안]). 섬 전용 화면은 `src/islands/<섬_id>/web/`에만 만든다 (`/islands/<섬_id>` 경로). 화면만 담당하고 상태 변경은 엔진 API로만 한다. 섬 장면은 `@codysseia/play`의 공개 훅·지도 부품만 import 한다. 사용법은 `docs/01_섬_제작_템플릿.md` 12절을 따른다. 섬 이미지·소리는 `src/islands/<섬_id>/assets/`. `src/web/app/islands/(generated)/`는 `src/web/scripts/sync-island-routes.mjs`가 생성하므로 직접 고치지 않는다.
 - **남의 섬은 건드리지 않는다.** 요청받은 섬 폴더(`src/islands/<섬_id>/`) 밖은 읽기만 한다. 다른 섬은 공개 훅(`hooks.yaml`)에 있는 것만 참조한다.
 - **ID 접두사** (대전제 8.2). 모든 ID와 플래그는 `<섬_id>.` 으로 시작한다.
 - `docs/00_대전제.md`, `/src/schemas`, `/src/engine`, `/src/gm`, `/src/web` 변경은 PR + 전원 합의 대상이다. 에이전트가 임의로 [제안]을 [확정]으로 바꾸지 않는다.
@@ -51,6 +51,10 @@ AGENTS.md / CLAUDE.md   에이전트 공통 지침 (이 파일)
 docs/                   대전제, 템플릿, 설계 문서, 참고 자료
 src/schemas/            데이터 JSON Schema
 src/engine/             코어 엔진 (판정, 상태, 전투, 이동) — TypeScript, 테스트: npm test
+src/catalog/            섬 패키지 검증·목록 파일 어댑터
+src/game/               방 게임 상태·턴·승인된 섬 행동
+src/host/               플레이어 호스트와 로비 전송 어댑터
+src/protocol/           게임 상태·명령·이벤트 직렬화 계약
 src/gm/                 게임 속 GM (프롬프트, 도구 연결, 공급자; 구현 예정)
 src/web/                웹 클라이언트 (Next.js App Router, npm 워크스페이스)
 src/islands/<섬_id>/    각자의 섬 (web/ 에 섬 전용 장면)
