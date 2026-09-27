@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { GAME_PROTOCOL_VERSION } from "../protocol/play.ts";
 
 const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -125,10 +126,12 @@ export class Lobby {
       const canResume = Number.isInteger(resumeRevision) && resumeRevision >= 0 && resumeRevision <= room.game.revision;
       socket.send(JSON.stringify(canResume ? {
         type: "game_resumed",
+        protocolVersion: GAME_PROTOCOL_VERSION,
         revision: room.game.revision,
         selfCharacterId: room.game.characterFor(member.id),
       } : {
         type: "game_snapshot",
+        protocolVersion: GAME_PROTOCOL_VERSION,
         revision: room.game.revision,
         state: room.game.snapshot(),
         selfCharacterId: room.game.characterFor(member.id),

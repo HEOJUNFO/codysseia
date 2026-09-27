@@ -1,5 +1,8 @@
 // 플레이 화면이 엔진에서 받는 상태. 원본은 엔진이고 화면은 읽기만 한다 (대전제 2.1).
 
+/** 스냅숏 필수 필드가 바뀌면 올린다. 이전 호스트의 상태를 새 화면에 주입하지 않는다. */
+export const GAME_PROTOCOL_VERSION = 1;
+
 export type Character = {
   id: string;
   name: string;
@@ -161,6 +164,7 @@ export type GameChange =
 
 export type GameSnapshotMessage = {
   type: "game_snapshot";
+  protocolVersion: number;
   revision: number;
   state: GameState;
   selfCharacterId: string;
@@ -168,6 +172,7 @@ export type GameSnapshotMessage = {
 
 export type GameResumeMessage = {
   type: "game_resumed";
+  protocolVersion: number;
   revision: number;
   selfCharacterId: string;
 };

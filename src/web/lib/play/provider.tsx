@@ -7,6 +7,7 @@ import { selectMemberRoom } from "@/lib/lobby/select-room";
 import type { LocalRooms } from "@/lib/lobby/types";
 import { RevisionStream } from "@/lib/revision-stream";
 import { applyIslandPatch } from "../../../protocol/island-state";
+import { GAME_PROTOCOL_VERSION } from "../../../protocol/play";
 import type { DeepReadonly, GameChange, GameCommand, GameResumeMessage, GameSnapshotMessage, GameState, JsonObject, JsonValue, MoveRequest, TurnState } from "./types";
 
 type Mover = {
@@ -32,12 +33,23 @@ type LobbySnapshot = {
 };
 
 const PlayContext = createContext<PlayContextValue | null>(null);
+const outdatedHostMessage = "호스트가 이전 버전으로 실행 중입니다. 호스트를 재시작하고 새 방을 열어주세요.";
 // 명령 ID는 중복 적용 방지용이다. HTTP로 접속한 LAN 브라우저에서도 생성할 수 있어야 한다.
 const commandPrefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 let commandSequence = 0;
 
 function nextCommandId(): string {
   return `${commandPrefix}-${(++commandSequence).toString(36)}`;
+}
+
+function hasCurrentGameState(value: unknown): value is GameState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as Partial<GameState>;
+  const turn = state.turn;
+  return Boolean(state.islandState && turn && (
+    turn.mode === "free" ||
+    (turn.mode === "ordered" && Number.isInteger(turn.round) && Array.isArray(turn.order) && typeof turn.activeCharacterId === "string")
+  ));
 }
 
 function applyChange(state: GameState, change: GameChange): GameState {
@@ -159,6 +171,12 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
             const member = lobby.members.find((entry) => entry.id === lobby.selfId);
             if (member) setIdentity((current) => ({ roomId: lobby.room.id, role: member.role, characterId: current?.characterId ?? "" }));
           } else if (message.type === "game_snapshot") {
+            if (message.protocolVersion !== GAME_PROTOCOL_VERSION || !hasCurrentGameState(message.state)) {
+              snapshotRef.current = null;
+              setSnapshot(null);
+              setError(outdatedHostMessage);
+              return;
+            }
             const initial = message as GameSnapshotMessage;
             lastRevision.current = initial.revision;
             stream.reset(initial.revision);
@@ -166,6 +184,12 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
             publish(initial.state);
             setIdentity((current) => current ? { ...current, characterId: initial.selfCharacterId } : null);
           } else if (message.type === "game_resumed") {
+            if (message.protocolVersion !== GAME_PROTOCOL_VERSION || !hasCurrentGameState(snapshotRef.current)) {
+              snapshotRef.current = null;
+              setSnapshot(null);
+              setError(outdatedHostMessage);
+              return;
+            }
             const resumed = message as GameResumeMessage;
             setIdentity((current) => current ? { ...current, characterId: resumed.selfCharacterId } : null);
             if (!snapshotRef.current) setError("이전 게임 상태가 없습니다. 새 상태를 요청하세요.");
@@ -233,7 +257,7 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
     <main className="grid min-h-dvh place-content-center gap-5 bg-[#071316] px-6 text-center text-[#efece1]">
       <h1 className="font-[family-name:var(--font-display)] text-3xl">게임에 연결하는 중</h1>
       {error ? <p role="alert" className="text-sm text-amber-200">{error}</p> : <p className="text-sm text-[#aebdb9]">방의 현재 상태를 받고 있습니다.</p>}
-      {error ? <button className="rounded bg-[#d9bc82] px-5 py-3 text-[#172322]" onClick={() => reconnect(true)}>새 상태 받기</button> : null}
+      {error && error !== outdatedHostMessage ? <button className="rounded bg-[#d9bc82] px-5 py-3 text-[#172322]" onClick={() => reconnect(true)}>새 상태 받기</button> : null}
       <Link href="/rooms" className="text-sm text-[#aebdb9]">멀티플레이로 돌아가기</Link>
     </main>
   );
