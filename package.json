@@ -10,7 +10,7 @@
     "dev": "npm run dev -w @codysseia/web",
     "build": "npm run build -w @codysseia/web",
     "lint": "npm run lint -w @codysseia/web",
-    "test": "npm test -w @codysseia/engine",
+    "test": "npm test -w @codysseia/engine && node --test \"src/game/test/*.test.ts\" \"src/gm/test/*.test.ts\"",
     "typecheck": "npm run typecheck -w @codysseia/engine"
   },
   "engines": {

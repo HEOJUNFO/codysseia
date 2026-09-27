@@ -16,13 +16,24 @@ GM은 호스트의 Codex가 맡는다.
 
 ## 웹 실행
 
-게임 코드와 섬 데이터는 `src/` 아래에 있다: `src/engine`, `src/game`, `src/protocol`, `src/host`, `src/web`, `src/islands`, `src/schemas`. 프로젝트 지침과 문서는 루트의 `AGENTS.md`, `docs/`에 둔다.
+게임 코드와 섬 데이터는 `src/` 아래에 있다: `src/engine`, `src/game`, `src/gm`, `src/protocol`, `src/host`, `src/web`, `src/islands`, `src/schemas`. 프로젝트 지침과 문서는 루트의 `AGENTS.md`, `docs/`에 둔다.
 
 ```sh
 npm install
 npm run dev   # http://localhost:3000, 섬 페이지는 /islands/<섬_id>
-npm test      # 엔진 테스트 (Node 22.18 이상)
+npm test      # 엔진·방·GM 테스트 (Node 22.18 이상)
 ```
+
+## GM 준비 (호스트만, 한 번)
+
+행동 입력은 호스트 PC의 공식 `codex` CLI가 GM으로 서술한다. 개발용 Codex 설정과 섞이지 않게 GM 전용 로그인을 한 번 한다.
+
+```sh
+mkdir -p ~/.tragic_trpg/gm-codex
+CODEX_HOME=~/.tragic_trpg/gm-codex codex login
+```
+
+로그인하지 않으면 게임은 그대로 돌고, 행동마다 "GM 서술을 받지 못했습니다" system 로그가 남는다. 경로·제한 시간 설정과 수동 점검 목록은 [`src/gm/README.md`](src/gm/README.md)에 있다.
 
 ## 멀티플레이 로비
 
@@ -42,4 +53,4 @@ npm test      # 엔진 테스트 (Node 22.18 이상)
 
 섬 화면은 2D·3D 등 자유롭게 구성할 수 있지만 게임 판정이나 상태 변경은 코어 API가 맡는다. 게임 상태에는 섬별 공유·캐릭터별 확장 데이터를 담을 자리가 있고, 변경은 엔진 경계에서 검증해 변경 이력으로 전파한다. 섬 전용 규칙을 붙이려면 [대전제 8.3](docs/00_대전제.md)의 코어 확장 절차가 먼저 필요하다. 현재 경계와 남은 작업은 [아키텍처 정리 기록](.scratch/architecture-cleanup/spec.md)에 적었다.
 
-현재 방·게임 상태·변경 이력은 호스트 프로세스 메모리에 있다. 실제 GM 연결, 디스크 저장, 다른 참가자로의 상태 복제와 호스트 이전은 아직 구현되지 않았다. 행동 입력의 GM 답변은 임시 문장이다.
+현재 방·게임 상태·변경 이력은 호스트 프로세스 메모리에 있다. 디스크 저장, 다른 참가자로의 상태 복제와 호스트 이전은 아직 구현되지 않았다. 행동 입력은 Codex GM이 서술하지만 GM 도구(상태 변경)는 아직 없고, 도착·항해 서술은 임시 문장이다.

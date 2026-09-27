@@ -42,6 +42,7 @@
     "../islands/*/web/**/*.ts",
     "../islands/*/web/**/*.tsx",
     "../game/**/*.ts",
+    "../gm/**/*.ts",
     "../protocol/**/*.ts"
   ],
   "exclude": [

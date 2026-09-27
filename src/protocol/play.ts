@@ -24,6 +24,8 @@ export type LogEntry = {
   id: string;
   role: "gm" | "player" | "system";
   text: string;
+  /** player 로그: 행동한 캐릭터 */
+  characterId?: string;
 };
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;

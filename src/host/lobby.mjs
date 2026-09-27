@@ -189,7 +189,6 @@ export class Lobby {
       } else if (message.type === "game_command" && room.game) {
         void room.game.execute(member.id, message.commandId, message.command).then((outcome) => {
           if (this.#rooms.get(roomId) !== room) return;
-          if (outcome.ok && outcome.event) this.#broadcast(room, outcome.event);
           if (socket.readyState === 1) socket.send(JSON.stringify({
             type: "game_command_result",
             commandId: message.commandId,
@@ -254,6 +253,8 @@ export class Lobby {
     }
     try {
       room.game = this.#createGame(room.islandId, room.members.values());
+      // 명령 응답과 나중에 도착하는 GM 서술이 같은 경로로 revision 순서대로 나간다.
+      room.game.subscribe((change) => this.#broadcast(room, change));
       room.phase = "playing";
       this.#publish(room, { type: "game_started", room: publicRoom(room) });
     } catch (error) {

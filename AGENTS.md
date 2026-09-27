@@ -67,7 +67,7 @@ src/catalog/            섬 패키지 검증·목록 파일 어댑터
 src/game/               방 게임 상태·턴·승인된 섬 행동
 src/host/               플레이어 호스트와 로비 전송 어댑터
 src/protocol/           게임 상태·명령·이벤트 직렬화 계약
-src/gm/                 게임 속 GM (프롬프트, 도구 연결, 공급자; 구현 예정)
+src/gm/                 게임 속 GM (코어 프롬프트, Codex 공급자; 도구 연결은 예정)
 src/web/                웹 클라이언트 (Next.js App Router, npm 워크스페이스)
 src/islands/<섬_id>/    각자의 섬 (web/ 에 섬 전용 장면)
 tools/                  개발 보조 도구 설정 (메모리 서버 등)
