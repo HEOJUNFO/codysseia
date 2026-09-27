@@ -7,7 +7,8 @@ import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
 import { parse } from "yaml";
 import islandSchema from "../../schemas/island.schema.json" with { type: "json" };
 import locationSchema from "../../schemas/location.schema.json" with { type: "json" };
-import type { Connection, IslandDef, IslandId, LocationDef, Point, World } from "./types.ts";
+import { isFlagOf } from "./flags.ts";
+import type { Connection, FlagId, IslandDef, IslandId, LocationDef, Point, World } from "./types.ts";
 
 type RawConnection = string | { to: string; requires_flags?: string[]; hidden_until_flags?: string[] };
 type RawIsland = {
@@ -64,6 +65,24 @@ export type LoadedIsland = {
   /** 비어 있으면 검증 통과 */
   errors: string[];
 };
+
+/** hooks.yaml 의 flags: 다른 섬이 읽어도 되는 자기 섬 플래그 (대전제 8.2·8.4). 파일이 없으면 공개 플래그도 없다. */
+function readPublicFlags(islandDir: string, islandId: IslandId, errors: string[]): FlagId[] {
+  const file = path.join(islandDir, "hooks.yaml");
+  if (!fs.existsSync(file)) return [];
+  const raw = readYaml(file, errors, "hooks.yaml") as { flags?: unknown } | null | undefined;
+  const flags = raw?.flags ?? [];
+  if (!Array.isArray(flags)) {
+    errors.push("hooks.yaml: flags 는 목록이어야 한다");
+    return [];
+  }
+  const valid: FlagId[] = [];
+  for (const flag of flags) {
+    if (typeof flag === "string" && isFlagOf(islandId, flag)) valid.push(flag);
+    else errors.push(`hooks.yaml: flags 는 ${islandId}.flag. 로 시작하는 자기 섬 플래그만 적는다 (${String(flag)})`);
+  }
+  return valid;
+}
 
 /** 섬 하나를 읽고 검증한다. 오류가 하나라도 있으면 island 는 null. */
 export function loadIsland(islandDir: string): LoadedIsland {
@@ -129,6 +148,8 @@ export function loadIsland(islandDir: string): LoadedIsland {
     }
   }
 
+  const publicFlags = readPublicFlags(islandDir, islandId, errors);
+
   let island: IslandDef | null = null;
   if (islandValid) {
     const raw = rawIsland as RawIsland;
@@ -151,6 +172,7 @@ export function loadIsland(islandDir: string): LoadedIsland {
       turnMode: raw.turn_mode ?? "free",
       position: raw.archipelago_position,
       mapImage: raw.map_image,
+      publicFlags,
     };
   }
 

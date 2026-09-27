@@ -105,6 +105,15 @@ function applyStateChange(state: RoomGameState, change: GameChange): RoomGameSta
     for (const patch of change.patches) islandState = applyIslandPatch(islandState, patch);
     return { ...state, islandState, turn: change.turn ?? state.turn, log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log };
   }
+  if (change.kind === "routes") {
+    return {
+      ...state,
+      moves: change.moves,
+      islandMap: change.islandMap,
+      discovered: change.discoveredAdded.length ? [...state.discovered, ...change.discoveredAdded] : state.discovered,
+      log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log,
+    };
+  }
   if (change.kind === "turn") return { ...state, turn: change.turn };
   return { ...state, log: [...state.log, ...change.logEntries] };
 }

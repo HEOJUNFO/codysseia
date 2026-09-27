@@ -137,3 +137,16 @@ describe("loadWorld", () => {
     expect(Object.keys(errors)).toEqual(["bad"]);
   });
 });
+
+describe("hooks.yaml 공개 플래그", () => {
+  it("자기 섬 플래그를 publicFlags 로 읽는다", () => {
+    const r = loadIsland(makeIsland("ash", { ...valid, "hooks.yaml": "flags: [ash.flag.bell_rung]\nnpcs: []\n" }));
+    expect(r.errors).toEqual([]);
+    expect(r.island?.publicFlags).toEqual(["ash.flag.bell_rung"]);
+  });
+
+  it("다른 섬 플래그를 공개하면 오류", () => {
+    const r = loadIsland(makeIsland("ash", { ...valid, "hooks.yaml": "flags: [fog.flag.lamp]\n" }));
+    expect(r.errors.join("\n")).toMatch(/hooks\.yaml: flags 는 ash\.flag\./);
+  });
+});

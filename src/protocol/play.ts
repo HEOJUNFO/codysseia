@@ -187,6 +187,8 @@ export type GameChange = (
       logEntries: LogEntry[];
     }
   | { type: "game_changed"; revision: number; kind: "spot"; characterId: string; spotId: string | null }
+  /** 플래그가 바뀌어 길의 잠김·숨김이 달라졌다. 잠김이 풀린 길은 증분으로 표현할 수 없어 섬 지도를 통째로 보낸다 */
+  | { type: "game_changed"; revision: number; kind: "routes"; moves: Moves; islandMap: IslandMapData; discoveredAdded: string[]; logEntries: LogEntry[] }
   | { type: "game_changed"; revision: number; kind: "log"; logEntries: LogEntry[] }
   | { type: "game_changed"; revision: number; kind: "island_patch"; patches: IslandPatch[]; turn?: TurnState; logEntries: LogEntry[] }
   | { type: "game_changed"; revision: number; kind: "turn"; turn: TurnState }

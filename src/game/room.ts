@@ -15,7 +15,8 @@ import {
 import { applyIslandPatch, copyJson, copyJsonObject, normalizeIslandPatch } from "../protocol/island-state.ts";
 import type { ActionBatch, Character, GameChange, GameCommand, IslandPatch, IslandState, LogEntry, MoveRequest, RoomGameState, SceneState, TurnFlow, TurnState, Voyage } from "../protocol/play.ts";
 import type { IslandActionHandler } from "./action-handler.ts";
-import type { GMInput, GMProvider, GMTurn } from "./gm-port.ts";
+import type { GMInput, GMProvider, GMStateView, GMToolResult, GMTools, GMTurn } from "./gm-port.ts";
+import { GM_TOOL_DEFINITIONS, runGMTool, type GMToolEffect } from "./gm-tools.ts";
 import { advanceTurn, initialTurn, transitionTurn } from "./turn.ts";
 
 type RoomMember = { id: string; name: string; role: "host" | "player" };
@@ -192,16 +193,26 @@ export class GameRoom {
       return { ok: false, error: "알 수 없는 이동 요청입니다." };
     }
     if (!result.ok) return { ok: false, error: result.error.message };
+    return { ok: true, event: this.#commitMove(request, result, narrate, null) };
+  }
+
+  /**
+   * 검증을 마친 이동을 적용하고 발행한다. GM 도구 이동(gmSummary)은 그 턴의 GM이 이미 서술하므로 도착 서술을 묶음에 넣지 않고,
+   * 기다리던 옛 도착만 버린 뒤 도구 요약 로그를 남긴다.
+   */
+  #commitMove(request: MoveRequest, result: Extract<MoveResult, { ok: true }>, narrate: boolean, gmSummary: string | null): GameChange | null {
     if (request.kind === "island") this.#ensureIslandState(request.islandId);
     const previous = this.#engine;
     this.#engine = result.state;
     if (request.kind === "island") this.#turn = initialTurn(this.#world.islands[request.islandId].turnMode ?? "free", this.#characterIds());
     if (request.kind === "spot") {
-      return { ok: true, event: this.#commit({ kind: "spot", characterId: request.characterIds[0], spotId: request.spotId }) };
+      const event = this.#commit({ kind: "spot", characterId: request.characterIds[0], spotId: request.spotId });
+      return gmSummary === null ? event : this.#commit({ kind: "log", logEntries: [this.#addLog("system", gmSummary)] });
     }
     const { logEntries, narration } = this.#applyEvents(result.events);
+    if (gmSummary !== null) logEntries.unshift(this.#addLog("system", gmSummary));
     this.#queueArrival(narrate ? narration : []);
-    const event = this.#commit({
+    return this.#commit({
       kind: "scene",
       ...this.#locationArea(),
       map: request.kind === "island"
@@ -212,7 +223,6 @@ export class GameRoom {
       ...(request.kind === "island" ? { time: result.state.time, voyage: this.#voyage ?? undefined, islandState: this.#currentIslandState(), turn: this.#turn } : {}),
       logEntries,
     });
-    return { ok: true, event };
   }
 
   #act(member: RoomMember, raw: string): Outcome {
@@ -335,9 +345,10 @@ export class GameRoom {
 
   /** #settle 이 연 GM 턴 하나를 돌린다. 턴의 완료가 서술을 발행하며 열린 묶음을 다시 판정한다. */
   async #runGmTurn(item: GMQueueItem): Promise<void> {
+    const session = this.#openGmTools();
     let entry: LogEntry;
     try {
-      const text = (await this.#gm.narrate(this.#gmTurn(item), this.#gmAbort.signal)).trim();
+      const text = (await this.#gm.narrate(this.#gmTurn(item), session.tools, this.#gmAbort.signal).finally(session.close)).trim();
       if (this.#closed) return;
       entry = text ? this.#addLog("gm", text) : this.#addLog("system", "GM이 빈 서술을 돌려주었습니다.");
     } catch (error) {
@@ -350,11 +361,61 @@ export class GameRoom {
 
   /** 턴이 시작되는 시점의 엔진 상태로 GM 입력을 만든다. 이번 턴의 행동 로그는 inputs 에만 넣는다. */
   #gmTurn(item: GMQueueItem): GMTurn {
+    const inputLogIds = new Set(item.logIds);
+    return {
+      ...this.#gmState(),
+      recentLog: this.#log.filter((entry) => !inputLogIds.has(entry.id)).slice(-RECENT_LOG).map(({ role, text }) => ({ role, text })),
+      inputs: item.inputs,
+    };
+  }
+
+  /** 이번 GM 턴에만 쓸 수 있는 도구. 턴이 끝나면 close 로 닫고, 그 뒤 호출은 거부한다. */
+  #openGmTools(): { tools: GMTools; close: () => void } {
+    let open = true;
+    return {
+      tools: {
+        definitions: GM_TOOL_DEFINITIONS,
+        call: (name, args) => open && !this.#closed
+          ? this.#gmTool(name, args)
+          : { ok: false, code: "turn_closed", message: "GM 턴이 끝나 도구를 쓸 수 없다." },
+      },
+      close: () => { open = false; },
+    };
+  }
+
+  /** 도구 호출은 동기로 엔진에 적용하고, 바뀐 상태는 다른 명령과 같은 revision 변경분으로 발행한다. */
+  #gmTool(name: string, args: unknown): GMToolResult {
+    const { result, effect } = runGMTool({ world: this.#world, engine: this.#engine, state: () => this.#gmState() }, name, args);
+    if (effect) this.#applyGmEffect(effect);
+    return result;
+  }
+
+  #applyGmEffect(effect: GMToolEffect): void {
+    if (effect.kind === "flag") {
+      this.#engine = effect.result.state;
+      this.#commit({
+        kind: "routes",
+        moves: availableMoves(this.#world, this.#engine),
+        islandMap: this.#islandMap(),
+        discoveredAdded: effect.result.discoveredAdded,
+        // 플래그 ID는 섬의 비밀을 담을 수 있어 화면에는 보이지 않는다. 자세한 기록은 호스트 턴 로그에 남는다.
+        logEntries: [this.#addLog("system", "GM이 이야기 진행 상태를 바꿨습니다.")],
+      });
+      return;
+    }
+    const { request, result } = effect;
+    const summary = request.kind === "location" ? `GM이 파티를 ${this.#world.locations[request.locationId].name}(으)로 옮겼습니다.`
+      : request.kind === "island" ? `GM이 파티를 ${this.#world.islands[request.islandId].name}(으)로 항해시켰습니다.`
+      : `GM이 ${this.#party().find((character) => character.id === request.characterIds[0])?.name ?? "캐릭터"}의 위치를 ${
+        request.spotId === null ? "지점 밖으로" : `${this.#world.locations[this.#engine.party.locationId].spots.find((spot) => spot.id === request.spotId)?.name ?? "지점"}(으)로`} 옮겼습니다.`;
+    this.#commitMove(request, result, false, summary);
+  }
+
+  #gmState(): GMStateView {
     const engine = this.#engine;
     const location = this.#world.locations[engine.party.locationId];
     const island = this.#world.islands[location.islandId];
     const spotName = (spotId: string | null) => location.spots.find((spot) => spot.id === spotId)?.name ?? null;
-    const inputLogIds = new Set(item.logIds);
     return {
       island: { id: island.id, name: island.name },
       location: {
@@ -375,8 +436,6 @@ export class GameRoom {
       moves: availableMoves(this.#world, engine),
       flags: engine.flags,
       time: engine.time,
-      recentLog: this.#log.filter((entry) => !inputLogIds.has(entry.id)).slice(-RECENT_LOG).map(({ role, text }) => ({ role, text })),
-      inputs: item.inputs,
     };
   }
 

@@ -8,6 +8,7 @@ import { loadIslandCatalog } from "../catalog/island-catalog.mjs";
 import { GameRoom } from "../game/room.ts";
 import { registeredIslandActions } from "../game/registered-island-actions.ts";
 import { CodexCliProvider } from "../gm/codex-cli-provider.ts";
+import { GMToolServer } from "../gm/tool-server.ts";
 
 const islandsDirectory = fileURLToPath(new URL("../islands/", import.meta.url));
 const gmHome = path.join(os.homedir(), ".tragic_trpg");
@@ -31,6 +32,8 @@ function gm() {
     // 섬 ID는 검증된 월드에서 온 값이다.
     islandGuide: (islandId) => readFile(path.join(islandsDirectory, islandId, "gm.md"), "utf8").catch(() => null),
     timeoutMs: Number(process.env.CODYSSEIA_GM_TIMEOUT_MS ?? 180_000),
+    // 로비 포트와 따로 127.0.0.1 에만 연다. 첫 GM 턴 때 열린다.
+    toolServer: new GMToolServer(),
   });
   return gmProvider;
 }
