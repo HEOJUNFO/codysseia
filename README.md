@@ -12,6 +12,8 @@ GM은 호스트의 Codex가 맡는다.
 - 개발 환경과 에이전트 지침: [`AGENTS.md`](AGENTS.md)
 - 참고 저장소: [`docs/references.md`](docs/references.md)
 
+개발 작업은 [AGENTS.md의 작업별 문서 읽기](AGENTS.md#작업별-문서-읽기)에서 해당 경로를 따라간다. `.scratch/`의 설계 문서는 구현 범위와 미완료 사항을 기록하며, 공통 규약의 승인 상태는 대전제가 정한다.
+
 ## 웹 실행
 
 게임 코드와 섬 데이터는 `src/` 아래에 있다: `src/engine`, `src/game`, `src/protocol`, `src/host`, `src/web`, `src/islands`, `src/schemas`. 프로젝트 지침과 문서는 루트의 `AGENTS.md`, `docs/`에 둔다.

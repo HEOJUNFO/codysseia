@@ -8,6 +8,18 @@
 여러 제작자가 각자 만든 섬을 파티가 자유롭게 탐험하는 디지털 TRPG. 게임 속 GM은 LLM 에이전트가 맡는다.
 모든 규약의 원본은 [`docs/00_대전제.md`](docs/00_대전제.md), 섬 제출 양식은 [`docs/01_섬_제작_템플릿.md`](docs/01_섬_제작_템플릿.md)다. 작업 전에 관련 절을 먼저 읽는다.
 
+## 작업별 문서 읽기
+
+이 파일을 읽은 다음, 작업에 해당하는 경로만 따라간다. 충돌하면 이 파일과 [대전제](docs/00_대전제.md)가 우선이다. `.scratch/`의 설계·이슈는 구현 범위와 미완료 사항을 설명하며, 대전제의 `[제안]`을 확정하지 않는다.
+
+| 작업 | 이어서 읽을 문서 |
+|---|---|
+| 섬 데이터·GM 지침·장면 제작 | [대전제 8장](docs/00_대전제.md) → [섬 제작 템플릿](docs/01_섬_제작_템플릿.md). 장면의 현재 공개 인터페이스는 [섬 플레이 인터페이스 검토](.scratch/island-play-interface/spec.md) |
+| 엔진·게임 상태·프로토콜·호스트 이전 | [대전제 2·8·9장](docs/00_대전제.md) → [멀티플레이 설계](.scratch/player-hosted-multiplayer/spec.md) → [현재 구현 경계와 남은 일](.scratch/architecture-cleanup/spec.md) |
+| 로비·웹 클라이언트 | [웹 지침](src/web/AGENTS.md) → [로비 현재 범위](.scratch/room-lobby/spec.md). 섬 장면이면 위 섬 제작 경로도 읽는다 |
+| Codex GM 연결·도구 | [대전제 2.1·2.4·9장](docs/00_대전제.md) → [GM 연결 설계](.scratch/gm-connection/spec.md) → [현재 멀티플레이 계약](.scratch/player-hosted-multiplayer/spec.md). 충돌하는 전송·턴 조율 초안은 마지막 문서와 현재 구현을 기준으로 재검토한다 |
+| 이슈·스펙·용어·ADR 작성 | [로컬 이슈 규칙](docs/agents/issue-tracker.md), [상태 표기](docs/agents/triage-labels.md), [도메인 문서 규칙](docs/agents/domain.md) 중 해당 문서 |
+
 ## 두 종류의 에이전트를 섞지 않는다
 
 | 구분 | 누구 | 무엇을 읽나 |

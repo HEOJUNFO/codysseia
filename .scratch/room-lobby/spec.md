@@ -3,6 +3,8 @@
 Status: implemented locally, proposal until team review
 Date: 2026-09-27
 
+공통 규약은 [대전제](../../docs/00_대전제.md), 웹 작업 지침은 [src/web/AGENTS.md](../../src/web/AGENTS.md)를 따른다. 게임 상태·섬 장면과의 경계는 [구조 정리 기록](../architecture-cleanup/spec.md)에 있다.
+
 ## 범위
 
 - 호스트가 자기 컴퓨터에서 방 이름·시작 섬·정원·이름을 입력해 여러 활성 방을 열 수 있다. 각 방은 참가자·게임 상태·변경 이력을 별도로 가진다.
