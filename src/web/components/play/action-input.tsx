@@ -6,7 +6,7 @@ import styles from "./play-ui.module.css";
 
 export function ActionInput() {
   const [text, setText] = useState("");
-  const { pending, turn } = useGameState();
+  const { pending, gmThinking, turn } = useGameState();
   const { characterId } = usePlayIdentity();
   const send = useSendAction();
   const canAct = turn.mode === "free" || turn.activeCharacterId === characterId;
@@ -24,7 +24,7 @@ export function ActionInput() {
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={canAct ? "무엇을 하시겠습니까?" : "다른 참가자의 차례입니다"}
+        placeholder={!canAct ? "다른 참가자의 차례입니다" : gmThinking ? "GM이 서술하는 중 · 지금 보낸 행동은 다음 턴에 처리됩니다" : "무엇을 하시겠습니까?"}
         aria-label="행동 입력"
         className={styles.actionInput}
         disabled={!canAct}

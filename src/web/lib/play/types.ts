@@ -20,6 +20,7 @@ export type {
   Moves,
   Place,
   Point,
+  RoomGameState,
   SceneState,
   TurnState,
   Voyage,

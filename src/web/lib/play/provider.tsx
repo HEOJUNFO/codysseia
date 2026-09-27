@@ -8,7 +8,7 @@ import type { LocalRooms } from "@/lib/lobby/types";
 import { RevisionStream } from "@/lib/revision-stream";
 import { applyIslandPatch } from "../../../protocol/island-state";
 import { GAME_PROTOCOL_VERSION } from "../../../protocol/play";
-import type { DeepReadonly, GameChange, GameCommand, GameResumeMessage, GameSnapshotMessage, GameState, JsonObject, JsonValue, MoveRequest, TurnState } from "./types";
+import type { DeepReadonly, GameChange, GameCommand, GameResumeMessage, GameSnapshotMessage, GameState, JsonObject, JsonValue, MoveRequest, RoomGameState, TurnState } from "./types";
 
 type Mover = {
   toLocation: (locationId: string) => void;
@@ -42,17 +42,17 @@ function nextCommandId(): string {
   return `${commandPrefix}-${(++commandSequence).toString(36)}`;
 }
 
-function hasCurrentGameState(value: unknown): value is GameState {
+function hasCurrentGameState(value: unknown): value is RoomGameState {
   if (!value || typeof value !== "object") return false;
-  const state = value as Partial<GameState>;
+  const state = value as Partial<RoomGameState>;
   const turn = state.turn;
-  return Boolean(state.islandState && turn && (
+  return Boolean(state.islandState && typeof state.gmThinking === "boolean" && turn && (
     turn.mode === "free" ||
     (turn.mode === "ordered" && Number.isInteger(turn.round) && Array.isArray(turn.order) && typeof turn.activeCharacterId === "string")
   ));
 }
 
-function applyChange(state: GameState, change: GameChange): GameState {
+function applyChange(state: RoomGameState, change: GameChange): RoomGameState {
   if (change.kind === "spot") {
     return {
       ...state,
@@ -88,6 +88,7 @@ function applyChange(state: GameState, change: GameChange): GameState {
       islandState: change.islandState ?? state.islandState,
       turn: change.turn ?? state.turn,
       log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log,
+      gmThinking: change.gmThinking ?? state.gmThinking,
     };
   }
   if (change.kind === "island_patch") {
@@ -96,14 +97,14 @@ function applyChange(state: GameState, change: GameChange): GameState {
     return { ...state, islandState, turn: change.turn ?? state.turn, log: change.logEntries.length ? [...state.log, ...change.logEntries] : state.log };
   }
   if (change.kind === "turn") return { ...state, turn: change.turn };
-  return { ...state, log: [...state.log, ...change.logEntries] };
+  return { ...state, log: [...state.log, ...change.logEntries], gmThinking: change.gmThinking ?? state.gmThinking };
 }
 
 export function PlayProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const requestedRoomId = useSearchParams().get("room");
-  const [snapshot, setSnapshot] = useState<GameState | null>(null);
+  const [snapshot, setSnapshot] = useState<RoomGameState | null>(null);
   const [identity, setIdentity] = useState<PlayContextValue["identity"] | null>(null);
   const [connected, setConnected] = useState(false);
   const [synchronizing, setSynchronizing] = useState(false);
@@ -111,7 +112,7 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState("");
   const [generation, setGeneration] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
-  const snapshotRef = useRef<GameState | null>(null);
+  const snapshotRef = useRef<RoomGameState | null>(null);
   const roomRef = useRef<string | null>(null);
   const lastRevision = useRef(0);
   const pendingCommands = useRef(new Set<string>());
@@ -120,7 +121,7 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
     const controller = new AbortController();
     let socket: WebSocket | null = null;
     let disposed = false;
-    const publish = (state: GameState) => { snapshotRef.current = state; setSnapshot(state); };
+    const publish = (state: RoomGameState) => { snapshotRef.current = state; setSnapshot(state); };
     const stream = new RevisionStream<GameChange>(
       (change) => change.revision,
       (change) => {

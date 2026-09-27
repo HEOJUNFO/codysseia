@@ -99,7 +99,7 @@ Status: ready-for-agent
 
 - **구현됨 (PR #2):** WebSocket으로 첫 상태를 한 번 보내고, 그 뒤로는 연속 `revision` 변경분만 보낸다. 빠진 구간은 다시 요청한다. 자세한 내용은 [로비 스펙](../room-lobby/spec.md)에 있다.
 - GM 서술 로그와 GM 턴 시작·종료도 같은 변경분으로 발행한다.
-- GM 턴이 도는 중이라는 상태를 방이 발행하고, 코어 틀에 대기 표시를 한다(이슈 04). 지금 `GameState.pending`은 방이 늘 `false`로 보내고, 브라우저가 명령 응답 대기·동기화·연결 상태로 채운다.
+- **구현됨 (이슈 04):** 방이 `GameState.gmThinking`으로 GM 턴이 도는 중인지 알린다. GM 큐가 켜지면 그 계기가 된 변경분(행동 `log`, 이동 `scene`)에, 큐가 비면 마지막 서술 `log` 변경분에 `gmThinking`을 싣는다. 재접속하면 스냅숏으로 받는다. `pending`은 방이 보내지 않고(`RoomGameState`) 브라우저가 명령 응답 대기·동기화·연결 상태로 채운다. GM 턴 동안 행동 입력은 막지 않고 다음 턴으로 받는다.
 - 섬 장면이 쓰는 공개 훅(`useGameState`, `useMove`, `useSendAction` 등)의 모양은 바꾸지 않는다.
 
 ### 방 입장과 신원

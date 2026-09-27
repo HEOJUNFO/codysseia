@@ -1,7 +1,7 @@
 // 플레이 화면이 엔진에서 받는 상태. 원본은 엔진이고 화면은 읽기만 한다 (대전제 2.1).
 
 /** 스냅숏 필수 필드가 바뀌면 올린다. 이전 호스트의 상태를 새 화면에 주입하지 않는다. */
-export const GAME_PROTOCOL_VERSION = 1;
+export const GAME_PROTOCOL_VERSION = 2;
 
 export type Character = {
   id: string;
@@ -122,9 +122,14 @@ export type GameState = {
   log: LogEntry[];
   islandState: IslandState;
   turn: TurnState;
-  /** 엔진·GM 응답을 기다리는 중 */
+  /** 방의 GM 턴이 도는 중. 도는 동안 보낸 행동은 다음 턴에 처리된다 */
+  gmThinking: boolean;
+  /** 이 브라우저가 보낸 명령의 응답·동기화·재연결을 기다리는 중. 방은 보내지 않고 화면이 채운다 */
   pending: boolean;
 };
+
+/** 방이 보내는 상태. `pending`은 브라우저마다 다르므로 빠진다 */
+export type RoomGameState = Omit<GameState, "pending">;
 
 export type MoveRequest =
   | { kind: "location"; locationId: string }
@@ -158,9 +163,11 @@ export type GameChange =
       islandState?: IslandState;
       turn?: TurnState;
       logEntries: LogEntry[];
+      /** 이 이동의 도착 서술로 GM 턴이 시작되면 true */
+      gmThinking?: boolean;
     }
   | { type: "game_changed"; revision: number; kind: "spot"; characterId: string; spotId: string | null }
-  | { type: "game_changed"; revision: number; kind: "log"; logEntries: LogEntry[] }
+  | { type: "game_changed"; revision: number; kind: "log"; logEntries: LogEntry[]; gmThinking?: boolean }
   | { type: "game_changed"; revision: number; kind: "island_patch"; patches: IslandPatch[]; turn?: TurnState; logEntries: LogEntry[] }
   | { type: "game_changed"; revision: number; kind: "turn"; turn: TurnState };
 
@@ -168,7 +175,7 @@ export type GameSnapshotMessage = {
   type: "game_snapshot";
   protocolVersion: number;
   revision: number;
-  state: GameState;
+  state: RoomGameState;
   selfCharacterId: string;
 };
 

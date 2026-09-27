@@ -1,7 +1,12 @@
 // GM 공급자 포트. 방은 턴 입력을 넘기고 서술만 받는다. 상태 변경은 반환값이 아니라 턴 중 도구 호출로만 일어난다.
 import type { Moves } from "../protocol/play.ts";
 
-export type GMInput = { kind: "action"; characterId: string; characterName: string; text: string };
+export type GMInput =
+  | { kind: "action"; characterId: string; characterName: string; text: string }
+  /** 섬 간 항해. 이름은 섬 이름이다 */
+  | { kind: "voyage"; from: string; to: string; hours: number }
+  /** 명확한 이동으로 도착한 장소. 현재 상태의 location 과 같다 */
+  | { kind: "arrival"; locationId: string; locationName: string; firstVisit: boolean };
 
 /** 엔진 상태에서 만든 이번 턴의 GM 입력 (대전제 9.1 현재 상태 + 이번 턴 입력) */
 export type GMTurn = {

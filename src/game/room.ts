@@ -13,7 +13,7 @@ import {
   type World,
 } from "@codysseia/engine";
 import { applyIslandPatch, copyJson, copyJsonObject, normalizeIslandPatch } from "../protocol/island-state.ts";
-import type { Character, GameChange, GameCommand, GameState, IslandPatch, IslandState, LogEntry, MoveRequest, SceneState, TurnState, Voyage } from "../protocol/play.ts";
+import type { Character, GameChange, GameCommand, IslandPatch, IslandState, LogEntry, MoveRequest, RoomGameState, SceneState, TurnState, Voyage } from "../protocol/play.ts";
 import type { IslandActionHandler } from "./action-handler.ts";
 import type { GMInput, GMProvider, GMTurn } from "./gm-port.ts";
 import { advanceTurn, initialTurn, transitionTurn } from "./turn.ts";
@@ -24,14 +24,11 @@ type AssetUrl = (islandId: string, asset: string | undefined) => string | null;
 type ChangeListener = (change: GameChange) => void;
 type PublishableChange = { [Kind in GameChange["kind"]]: Omit<Extract<GameChange, { kind: Kind }>, "type" | "revision"> }[GameChange["kind"]];
 
+/** GM 턴 하나의 입력. logIds 는 이번 입력이 이미 남긴 로그라 최근 로그에서 뺀다 */
+type GMQueueItem = { inputs: GMInput[]; logIds: string[] };
+
 /** GM 턴 입력에 넣는 최근 로그 수. 긴 세션 요약(대전제 9.3)은 아직 없다 */
 const RECENT_LOG = 12;
-
-function formatHours(hours: number): string {
-  const days = Math.floor(hours / 24);
-  const rest = hours % 24;
-  return days === 0 ? `${rest}시간` : rest === 0 ? `${days}일` : `${days}일 ${rest}시간`;
-}
 
 export class GameRoom {
   readonly #world: World;
@@ -52,8 +49,9 @@ export class GameRoom {
   #turn: TurnState;
   #closed = false;
   #commandQueue: Promise<void> = Promise.resolve();
-  /** 방마다 GM 턴은 하나씩만 돈다. 도는 동안 들어온 행동은 여기서 기다린다 */
-  #gmQueue: { input: GMInput; logId: string }[] = [];
+  /** 방마다 GM 턴은 하나씩만 돈다. 도는 동안 들어온 행동과 도착은 여기서 기다린다 */
+  #gmQueue: GMQueueItem[] = [];
+  /** 큐가 빌 때까지 켜져 있다. 켠 시점은 그 계기가 된 변경분, 끈 시점은 마지막 서술 log 변경분의 gmThinking 으로 발행한다 */
   #gmRunning = false;
 
   constructor(world: World, startIslandId: string, members: Iterable<RoomMember>, assetUrl: AssetUrl, rules: ReadonlyMap<string, IslandActionHandler>, gm: GMProvider) {
@@ -80,8 +78,9 @@ export class GameRoom {
     this.#engine = startGame(world, characterIds, startIslandId);
     this.#turn = initialTurn(world.islands[startIslandId].turnMode ?? "free", characterIds);
     this.#ensureIslandState(startIslandId);
-    this.#addLog("system", "엔진 연결됨 · 행동은 GM이 서술합니다. 도착·항해 서술은 아직 임시 문장입니다.");
-    this.#arrival(this.#engine.party.locationId, true);
+    this.#addLog("system", "엔진 연결됨 · 행동과 도착은 GM이 서술합니다.");
+    // 첫 도착 서술은 발행할 변경분이 없다. 켜진 #gmRunning 은 스냅숏의 gmThinking 으로 전해진다.
+    if (this.#queueArrival([this.#arrivalInput(this.#engine.party.locationId, true)])) void this.#runGmTurns();
   }
 
   get revision(): number { return this.#events.length; }
@@ -105,8 +104,8 @@ export class GameRoom {
     for (const character of this.#characters.values()) yield character.id;
   }
 
-  snapshot(): GameState {
-    return { ...this.#scene(), inventory: [], log: this.#log, islandState: this.#currentIslandState(), turn: this.#turn, pending: false };
+  snapshot(): RoomGameState {
+    return { ...this.#scene(), inventory: [], log: this.#log, islandState: this.#currentIslandState(), turn: this.#turn, gmThinking: this.#gmRunning };
   }
 
   replay(from: number, to: number): Iterable<GameChange> | null {
@@ -147,7 +146,8 @@ export class GameRoom {
     return outcome;
   }
 
-  #move(member: RoomMember, request: MoveRequest): Outcome {
+  /** 명확한 이동은 GM을 기다리지 않고 바로 발행한다. 항해·도착 서술은 GM 큐에서 뒤따른다. narrate 가 false 면(개발 명령) GM을 거치지 않는다. */
+  #move(member: RoomMember, request: MoveRequest, narrate = true): Outcome {
     if (!request || typeof request !== "object") return { ok: false, error: "이동 요청이 올바르지 않습니다." };
     let result: MoveResult;
     if (request.kind === "location") {
@@ -177,8 +177,9 @@ export class GameRoom {
     if (request.kind === "spot") {
       return { ok: true, event: this.#publish({ kind: "spot", characterId: request.characterIds[0], spotId: request.spotId }) };
     }
-    const logEntries = this.#applyEvents(result.events);
-    return { ok: true, event: this.#publish({
+    const { logEntries, narration } = this.#applyEvents(result.events);
+    const starting = this.#queueArrival(narrate ? narration : []);
+    const event = this.#publish({
       kind: "scene",
       ...this.#locationArea(),
       map: request.kind === "island"
@@ -188,7 +189,10 @@ export class GameRoom {
       discoveredAdded: result.state.discovered.slice(previous.discovered.length),
       ...(request.kind === "island" ? { time: result.state.time, voyage: this.#voyage ?? undefined, islandState: this.#currentIslandState(), turn: this.#turn } : {}),
       logEntries,
-    }) };
+      ...(starting ? { gmThinking: true } : {}),
+    });
+    if (starting) void this.#runGmTurns();
+    return { ok: true, event };
   }
 
   #act(member: RoomMember, raw: string): Outcome {
@@ -196,42 +200,62 @@ export class GameRoom {
     const text = raw.trim();
     if (!text || text.length > 1000) return { ok: false, error: "행동은 1~1000자로 입력하세요." };
     const travel = /^\/move\s+([a-z][a-z0-9_]*)$/.exec(text);
-    if (travel) return this.#move(member, { kind: "island", islandId: travel[1] });
+    if (travel) return this.#move(member, { kind: "island", islandId: travel[1] }, false);
     if (this.#turn.mode === "ordered" && this.#turn.activeCharacterId !== this.characterFor(member.id)) return { ok: false, error: "자신의 턴에만 행동할 수 있습니다." };
     const character = this.#characters.get(member.id);
     if (!character) return { ok: false, error: "캐릭터를 찾을 수 없습니다." };
     const entry = this.#addLog("player", `${member.name}: ${text}`, character.id);
-    const event = this.#publish({ kind: "log", logEntries: [entry] });
-    this.#gmQueue.push({ input: { kind: "action", characterId: character.id, characterName: character.name, text }, logId: entry.id });
-    if (!this.#gmRunning) void this.#runGmTurns();
+    const starting = this.#enqueueGm({ inputs: [{ kind: "action", characterId: character.id, characterName: character.name, text }], logIds: [entry.id] });
+    const event = this.#publish({ kind: "log", logEntries: [entry], ...(starting ? { gmThinking: true } : {}) });
+    if (starting) void this.#runGmTurns();
     return { ok: true, event };
   }
 
-  async #runGmTurns(): Promise<void> {
+  /** 큐에 넣고 #gmRunning 을 켠다. 이번에 켰으면 true — 부른 쪽이 그 변경분에 gmThinking 을 싣고 #runGmTurns 를 부른다. */
+  #enqueueGm(item: GMQueueItem): boolean {
+    this.#gmQueue.push(item);
+    if (this.#gmRunning) return false;
     this.#gmRunning = true;
+    return true;
+  }
+
+  /**
+   * 도착 서술을 GM 큐에 넣는다. 아직 시작하지 않은 이전 도착은 파티가 이미 떠난 곳이라 버리고, 그 항해만 새 도착 앞에 잇는다.
+   * 큐에는 도착 항목이 많아야 하나라서 GM 턴의 현재 상태와 도착 장소가 어긋나지 않는다. inputs 가 비면(개발 명령) 이전 도착만 버린다.
+   */
+  #queueArrival(inputs: GMInput[]): boolean {
+    const index = this.#gmQueue.findIndex((item) => item.inputs.some((input) => input.kind === "arrival"));
+    const carried = index === -1 ? [] : this.#gmQueue.splice(index, 1)[0].inputs.filter((input) => input.kind === "voyage");
+    return inputs.length > 0 && this.#enqueueGm({ inputs: [...carried, ...inputs], logIds: [] });
+  }
+
+  /** #gmRunning 을 켠 쪽이 부른다. 큐가 비면 마지막 서술과 함께 GM 턴 종료를 발행한다. */
+  async #runGmTurns(): Promise<void> {
     while (this.#gmQueue.length > 0 && !this.#closed) {
       const item = this.#gmQueue.shift()!;
       let entry: LogEntry;
       try {
-        const text = (await this.#gm.narrate(this.#gmTurn([item]), this.#gmAbort.signal)).trim();
+        const text = (await this.#gm.narrate(this.#gmTurn(item), this.#gmAbort.signal)).trim();
         if (this.#closed) break;
         entry = text ? this.#addLog("gm", text) : this.#addLog("system", "GM이 빈 서술을 돌려주었습니다.");
       } catch (error) {
         if (this.#closed) break;
         entry = this.#addLog("system", `GM 서술을 받지 못했습니다: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
       }
-      this.#publish({ kind: "log", logEntries: [entry] });
+      const done = this.#gmQueue.length === 0;
+      if (done) this.#gmRunning = false;
+      this.#publish({ kind: "log", logEntries: [entry], ...(done ? { gmThinking: false } : {}) });
     }
     this.#gmRunning = false;
   }
 
   /** 턴이 시작되는 시점의 엔진 상태로 GM 입력을 만든다. 이번 턴의 행동 로그는 inputs 에만 넣는다. */
-  #gmTurn(items: { input: GMInput; logId: string }[]): GMTurn {
+  #gmTurn(item: GMQueueItem): GMTurn {
     const engine = this.#engine;
     const location = this.#world.locations[engine.party.locationId];
     const island = this.#world.islands[location.islandId];
     const spotName = (spotId: string | null) => location.spots.find((spot) => spot.id === spotId)?.name ?? null;
-    const inputLogIds = new Set(items.map((item) => item.logId));
+    const inputLogIds = new Set(item.logIds);
     return {
       island: { id: island.id, name: island.name },
       location: {
@@ -253,7 +277,7 @@ export class GameRoom {
       flags: engine.flags,
       time: engine.time,
       recentLog: this.#log.filter((entry) => !inputLogIds.has(entry.id)).slice(-RECENT_LOG).map(({ role, text }) => ({ role, text })),
-      inputs: items.map((item) => item.input),
+      inputs: item.inputs,
     };
   }
 
@@ -336,15 +360,14 @@ export class GameRoom {
     return entry;
   }
 
-  #arrival(locationId: string, firstVisit: boolean): LogEntry {
-    const location = this.#world.locations[locationId];
-    const island = this.#world.islands[location.islandId];
-    const description = firstVisit && location.description ? ` ${location.description}` : "";
-    return this.#addLog("gm", `(가짜 GM) ${island.name} · ${location.name}에 ${firstVisit ? "처음 " : ""}도착했다.${description}`);
+  #arrivalInput(locationId: string, firstVisit: boolean): GMInput {
+    return { kind: "arrival", locationId, locationName: this.#world.locations[locationId].name, firstVisit };
   }
 
-  #applyEvents(events: MoveEvent[]): LogEntry[] {
-    const entries: LogEntry[] = [];
+  /** 이동 이벤트를 반영한다. 섬 진입은 system 로그로 남기고, 항해·도착은 GM 서술 입력으로 돌려준다. */
+  #applyEvents(events: MoveEvent[]): { logEntries: LogEntry[]; narration: GMInput[] } {
+    const logEntries: LogEntry[] = [];
+    const narration: GMInput[] = [];
     for (const event of events) {
       if (event.type === "voyage") {
         const from = this.#world.islands[event.from];
@@ -355,14 +378,14 @@ export class GameRoom {
           to: { id: to.id, name: to.name, position: to.position },
           hours: event.hours,
         };
-        entries.push(this.#addLog("gm", `(가짜 GM) ${from.name}을(를) 떠나 ${formatHours(event.hours)} 동안 바다를 건넜다.`));
+        narration.push({ kind: "voyage", from: from.name, to: to.name, hours: event.hours });
       } else if (event.type === "island_entered") {
-        entries.push(this.#addLog("system", `섬 이동 → ${this.#world.islands[event.islandId].name}`));
+        logEntries.push(this.#addLog("system", `섬 이동 → ${this.#world.islands[event.islandId].name}`));
       } else if (event.type === "location_entered") {
-        entries.push(this.#arrival(event.locationId, event.firstVisit));
+        narration.push(this.#arrivalInput(event.locationId, event.firstVisit));
       }
     }
-    return entries;
+    return { logEntries, narration };
   }
 
   #locationArea(): Omit<Pick<SceneState, "place" | "moves" | "locationView">, "place"> & { place: NonNullable<SceneState["place"]> } {

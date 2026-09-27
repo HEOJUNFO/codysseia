@@ -11,12 +11,12 @@ const ROLE_STYLE = {
 } as const;
 
 export function GMLog() {
-  const { log, pending } = useGameState();
+  const { log, gmThinking } = useGameState();
   const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
-  }, [log.length, pending]);
+  }, [log.length, gmThinking]);
 
   return (
     <div className={styles.log} aria-live="polite">
@@ -26,7 +26,7 @@ export function GMLog() {
           {e.text}
         </p>
       ))}
-      {pending ? <p className={styles.system}>GM이 생각하는 중…</p> : null}
+      {gmThinking ? <p className={styles.system}>GM이 생각하는 중…</p> : null}
       <div ref={end} />
     </div>
   );
