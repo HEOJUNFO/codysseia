@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { islands } from "@/lib/islands.generated";
-import type { RoomInfo } from "@/lib/lobby/types";
+import type { LocalRooms, RoomInfo } from "@/lib/lobby/types";
 import { LobbyIcon } from "./lobby-icon";
 import { LobbyShell } from "./lobby-shell";
 import styles from "./lobby.module.css";
@@ -34,9 +34,9 @@ export function JoinRoom({ invitedRoom, initialError }: { invitedRoom: string; i
     const controller = new AbortController();
     fetch("/api/lobby/local", { cache: "no-store", signal: controller.signal })
       .then((response) => response.json())
-      .then((result: { room: RoomInfo | null }) => {
+      .then((result: LocalRooms) => {
         setHostAddress(window.location.origin);
-        if (invitedRoom) setCurrentRoom(result.room);
+        if (invitedRoom) setCurrentRoom(result.rooms.find((room) => room.id === invitedRoom) ?? null);
       })
       .catch(() => { if (!controller.signal.aborted) setHostAddress(window.location.origin); });
     return () => controller.abort();

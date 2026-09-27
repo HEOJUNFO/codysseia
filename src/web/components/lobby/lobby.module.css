@@ -60,7 +60,8 @@
 .connectAction { display: inline-flex; align-items: center; justify-content: space-between; gap: 28px; min-width: 215px; min-height: 50px; padding: 0 17px; border-radius: 4px; color: #172322; background: var(--gold); font-size: 13px; font-weight: 750; text-decoration: none; }
 .connectAction:hover { background: #f0d59b; }
 .connectHint { margin: 18px 0 0; color: #9caea4; font-size: 12px; line-height: 1.9; }
-.currentRoom { display: grid; gap: 6px; margin-top: auto; padding: 20px 22px; border-radius: 4px; background: rgb(255 255 255 / 6%); }
+.roomList { display: grid; gap: 9px; max-height: 360px; margin-top: auto; overflow-y: auto; }
+.currentRoom { display: grid; gap: 6px; padding: 20px 22px; border-radius: 4px; background: rgb(255 255 255 / 6%); }
 .currentRoom > span { color: #a5b8aa; font-size: 11px; }
 .currentRoom h3 { margin: 0; font-family: var(--font-display), Georgia, serif; font-size: 22px; font-weight: 600; }
 .currentRoom p { margin: 0; color: #aebfb2; font-size: 12px; }

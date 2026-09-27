@@ -45,15 +45,16 @@ function localRequest(request) {
   }
 }
 
-function memberToken(request) {
+function memberToken(request, roomId) {
   const cookies = request.headers.cookie?.split(";") ?? [];
-  const raw = cookies.find((item) => item.trim().startsWith("codysseia_member="));
-  return raw?.trim().slice("codysseia_member=".length) ?? "";
+  const name = `codysseia_member_${roomId}=`;
+  const raw = cookies.find((item) => item.trim().startsWith(name));
+  return raw?.trim().slice(name.length) ?? "";
 }
 
-function memberCookie(request, token) {
+function memberCookie(request, roomId, token) {
   const secure = request.socket.encrypted || request.headers["x-forwarded-proto"] === "https";
-  return `codysseia_member=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure ? "; Secure" : ""}`;
+  return `codysseia_member_${roomId}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure ? "; Secure" : ""}`;
 }
 
 async function body(request) {
@@ -74,11 +75,13 @@ async function lobbyRoute(request, response) {
   const url = new URL(request.url ?? "/", "http://localhost");
   if (url.pathname === "/api/lobby/local" && request.method === "GET") {
     const canHost = localRequest(request);
-    const room = lobby.currentRoom();
+    const rooms = lobby.listRooms().map((room) => ({
+      ...room,
+      isMember: Boolean(lobby.membership(memberToken(request, room.id), room.id)),
+    }));
     json(response, 200, {
       canHost,
-      room,
-      isMember: Boolean(room && lobby.membership(memberToken(request), room.id)),
+      rooms,
     });
     return true;
   }
@@ -87,33 +90,37 @@ async function lobbyRoute(request, response) {
     try {
       const input = JSON.parse(await body(request));
       const result = lobby.create(input);
-      json(response, 201, { room: result.room, code: result.code }, { "Set-Cookie": memberCookie(request, result.token) });
+      json(response, 201, { room: result.room, code: result.code }, { "Set-Cookie": memberCookie(request, result.room.id, result.token) });
     } catch (error) {
       json(response, 400, { error: error instanceof Error ? error.message : "방을 만들지 못했습니다." });
     }
     return true;
   }
   if (url.pathname === "/api/lobby/join-form" && request.method === "POST") {
+    let requestedRoomId = "";
     try {
       const input = new URLSearchParams(await body(request));
+      requestedRoomId = input.get("roomId") ?? "";
       const result = lobby.join({
         code: input.get("code"),
         name: input.get("name"),
-        roomId: input.get("roomId"),
+        roomId: requestedRoomId,
       });
-      redirect(response, `/rooms/${encodeURIComponent(result.room.id)}`, memberCookie(request, result.token));
+      redirect(response, `/rooms/${encodeURIComponent(result.room.id)}`, memberCookie(request, result.room.id, result.token));
     } catch (error) {
       const message = error instanceof Error ? error.message : "방에 입장하지 못했습니다.";
-      redirect(response, `/rooms/join?error=${encodeURIComponent(message)}`);
+      const query = new URLSearchParams({ error: message });
+      if (requestedRoomId) query.set("room", requestedRoomId);
+      redirect(response, `/rooms/join?${query}`);
     }
     return true;
   }
   const roomRoute = /^\/api\/lobby\/rooms\/([^/]+)$/.exec(url.pathname);
   if (roomRoute && request.method === "GET") {
-    const membership = lobby.membership(memberToken(request), roomRoute[1]);
+    const membership = lobby.membership(memberToken(request, roomRoute[1]), roomRoute[1]);
     if (!membership) json(response, 401, { error: "참가 정보가 없습니다." });
     else json(response, 200, {
-      room: lobby.currentRoom(),
+      room: lobby.room(roomRoute[1]),
       self: membership.member,
       code: membership.member.role === "host" ? membership.room.code : undefined,
       addresses: membership.member.role === "host" ? hostAddresses() : [],
@@ -145,7 +152,7 @@ server.on("upgrade", (request, socket, head) => {
   const roomId = url.searchParams.get("room") ?? "";
   const revisionParam = url.searchParams.get("revision");
   const resumeRevision = revisionParam === null ? null : Number(revisionParam);
-  const token = memberToken(request);
+  const token = memberToken(request, roomId);
   if (!lobby.membership(token, roomId)) {
     socket.destroy();
     return;

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { islands } from "@/lib/islands.generated";
-import type { RoomInfo } from "@/lib/lobby/types";
+import type { LocalRooms } from "@/lib/lobby/types";
 import { LobbyIcon } from "./lobby-icon";
 import { LobbyShell } from "./lobby-shell";
 import styles from "./lobby.module.css";
@@ -18,8 +18,6 @@ export function HostSetup() {
   const [islandId, setIslandId] = useState(availableIslands[0]?.id ?? "");
   const [capacity, setCapacity] = useState<1 | 2 | 3 | 4>(4);
   const [canHost, setCanHost] = useState<boolean | null>(null);
-  const [activeRoom, setActiveRoom] = useState<RoomInfo | null>(null);
-  const [isMember, setIsMember] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const selectedIsland = availableIslands.find((island) => island.id === islandId);
@@ -28,11 +26,9 @@ export function HostSetup() {
     let active = true;
     fetch("/api/lobby/local", { cache: "no-store" })
       .then((response) => response.json())
-      .then((status: { canHost: boolean; isMember: boolean; room: RoomInfo | null }) => {
+      .then((status: LocalRooms) => {
         if (!active) return;
         setCanHost(status.canHost);
-        setActiveRoom(status.room);
-        setIsMember(status.isMember);
       })
       .catch(() => { if (active) setError("호스트 상태를 확인하지 못했습니다."); });
     return () => { active = false; };
@@ -82,10 +78,10 @@ export function HostSetup() {
               <legend>최대 플레이어 수</legend>
               <div className={styles.capacityOptions}>{([1, 2, 3, 4] as const).map((count) => <label key={count} className={capacity === count ? styles.capacitySelected : styles.capacityOption}><input type="radio" name="capacity" checked={capacity === count} onChange={() => setCapacity(count)} /><strong>{count}</strong><span>명</span></label>)}</div>
             </fieldset></div>
-            {activeRoom ? <div className={styles.formNotice}><LobbyIcon name="lock" size={20} /><p>이미 열린 방이 있습니다. <Link href={isMember ? activeRoom.phase === "playing" ? "/explore" : `/rooms/${activeRoom.id}` : `/rooms/join?room=${activeRoom.id}`}>{isMember ? activeRoom.phase === "playing" ? "게임으로 이동" : "대기실로 이동" : "방 참가"}</Link></p></div> : <div className={styles.formNotice}><LobbyIcon name="lock" size={20} /><p>방을 열면 이 컴퓨터가 호스트가 됩니다. 참가자에게 IP와 방 코드를 알려 주세요.</p></div>}
+            <div className={styles.formNotice}><LobbyIcon name="lock" size={20} /><p>방을 열면 이 컴퓨터가 호스트가 됩니다. 방을 여러 개 열 수 있으며 각 방의 참가자와 게임은 따로 관리됩니다.</p></div>
             {canHost === false ? <p className={styles.formError} role="alert">방 생성은 자신의 컴퓨터에서 실행한 앱에서만 가능합니다.</p> : null}
             {error ? <p className={styles.formError} role="alert">{error}</p> : null}
-            <div className={styles.formFooter}><button className={styles.primaryButton} type="submit" disabled={creating || canHost !== true || Boolean(activeRoom) || !islandId}><LobbyIcon name="check" size={19} /> {creating ? "방 여는 중..." : "방 열기"}</button><Link href="/rooms" className={styles.secondaryTextButton}>취소</Link></div>
+            <div className={styles.formFooter}><button className={styles.primaryButton} type="submit" disabled={creating || canHost !== true || !islandId}><LobbyIcon name="check" size={19} /> {creating ? "방 여는 중..." : "방 열기"}</button><Link href="/rooms" className={styles.secondaryTextButton}>취소</Link></div>
           </form>
           <aside className={styles.hostAside} aria-label="방 설정 미리보기">
             <p className={styles.asideKicker}>ROOM PREVIEW</p>

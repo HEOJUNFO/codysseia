@@ -11,9 +11,10 @@ import styles from "./archipelago-home.module.css";
 export type HomeIsland = IslandEntry & { hours: number | null };
 export type HomeParty = { islandId: string; islandName: string; time: number } | null;
 
-export function ArchipelagoHome({ islands, party, canLead, travelOptions, onTravel, pending }: {
+export function ArchipelagoHome({ islands, party, roomId, canLead, travelOptions, onTravel, pending }: {
   islands: HomeIsland[];
   party: HomeParty;
+  roomId?: string;
   canLead: boolean;
   travelOptions: Moves["islands"];
   onTravel: (islandId: string) => void;
@@ -45,7 +46,7 @@ export function ArchipelagoHome({ islands, party, canLead, travelOptions, onTrav
       </main>
       <aside className={styles.sidebar}>
         <div className={styles.sideTop}><span className={styles.kicker}>목적지 선택</span><h2>항해를 시작하세요</h2><p>지도 또는 아래 목록에서 섬을 고를 수 있습니다.</p></div>
-        {selected ? <IslandDetail island={selected} party={party} canLead={canLead} travel={travelOptions.find((option) => option.id === selected.id)} onTravel={onTravel} pending={pending} /> : <p className={styles.noSelection}>섬을 선택하면 이곳에 정보가 표시됩니다.</p>}
+        {selected ? <IslandDetail island={selected} party={party} roomId={roomId} canLead={canLead} travel={travelOptions.find((option) => option.id === selected.id)} onTravel={onTravel} pending={pending} /> : <p className={styles.noSelection}>섬을 선택하면 이곳에 정보가 표시됩니다.</p>}
         <div className={styles.islandList} aria-label="섬 목록">
           {islands.map((island) => (
             <button key={island.id} type="button" className={`${styles.islandItem} ${island.id === selectedId ? styles.islandItemActive : ""}`} onClick={() => setSelectedId(island.id)} aria-pressed={island.id === selectedId}>
@@ -59,9 +60,10 @@ export function ArchipelagoHome({ islands, party, canLead, travelOptions, onTrav
   );
 }
 
-function IslandDetail({ island, party, canLead, travel, onTravel, pending }: {
+function IslandDetail({ island, party, roomId, canLead, travel, onTravel, pending }: {
   island: HomeIsland;
   party: HomeParty;
+  roomId?: string;
   canLead: boolean;
   travel: Moves["islands"][number] | undefined;
   onTravel: (islandId: string) => void;
@@ -75,7 +77,7 @@ function IslandDetail({ island, party, canLead, travel, onTravel, pending }: {
       <h3>{island.name}</h3>
       {island.concept ? <p className={styles.concept}>{island.concept}</p> : null}
       <dl className={styles.meta}>{details.filter(([, value]) => value).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
-      {current ? <Link href={`/islands/${island.id}`} className={styles.enter}>탐험 이어하기<span aria-hidden="true">↗</span></Link>
+      {current ? <Link href={`/islands/${island.id}${roomId ? `?room=${encodeURIComponent(roomId)}` : ""}`} className={styles.enter}>탐험 이어하기<span aria-hidden="true">↗</span></Link>
         : island.playable && canLead && travel && !travel.locked ? <button type="button" className={styles.enter} disabled={pending} onClick={() => onTravel(island.id)}>항해하기 · {formatHours(travel.hours)}<span aria-hidden="true">↗</span></button>
         : <p className={styles.unavailable}>{!island.playable ? "아직 입장할 수 없습니다." : !canLead ? "호스트가 항해를 결정합니다." : travel?.locked ? "아직 항해할 수 없습니다." : "출발 지점에서 항해할 수 있습니다."}</p>}
       {island.problems.length + island.warnings.length > 0 ? (

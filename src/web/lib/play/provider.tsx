@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { selectMemberRoom } from "@/lib/lobby/select-room";
+import type { LocalRooms } from "@/lib/lobby/types";
 import { RevisionStream } from "@/lib/revision-stream";
 import { applyIslandPatch } from "../../../protocol/island-state";
 import type { GameChange, GameCommand, GameResumeMessage, GameSnapshotMessage, GameState, MoveRequest } from "./types";
@@ -18,11 +20,6 @@ type PlayContextValue = {
   sendAction: (text: string) => void;
   move: Mover;
   identity: { roomId: string; role: "host" | "player"; characterId: string };
-};
-
-type RoomStatus = {
-  isMember: boolean;
-  room: { id: string; phase: "waiting" | "playing" } | null;
 };
 
 type LobbySnapshot = {
@@ -77,6 +74,7 @@ function applyChange(state: GameState, change: GameChange): GameState {
 export function PlayProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const requestedRoomId = useSearchParams().get("room");
   const [snapshot, setSnapshot] = useState<GameState | null>(null);
   const [identity, setIdentity] = useState<PlayContextValue["identity"] | null>(null);
   const [connected, setConnected] = useState(false);
@@ -113,22 +111,24 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
     fetch("/api/lobby/local", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("방 정보를 불러오지 못했습니다.");
-        return response.json() as Promise<RoomStatus>;
+        return response.json() as Promise<LocalRooms>;
       })
       .then((status) => {
         if (disposed) return;
-        if (!status.room || !status.isMember) { router.replace("/rooms"); return; }
-        if (status.room.phase !== "playing") { router.replace(`/rooms/${status.room.id}`); return; }
-        const resumeRevision = roomRef.current === status.room.id && snapshotRef.current ? lastRevision.current : null;
-        if (roomRef.current !== status.room.id) {
-          roomRef.current = status.room.id;
+        const room = selectMemberRoom(status.rooms, requestedRoomId);
+        if (!room) { router.replace("/rooms"); return; }
+        if (room.phase !== "playing") { router.replace(`/rooms/${room.id}`); return; }
+        const resumeRevision = roomRef.current === room.id && snapshotRef.current ? lastRevision.current : null;
+        if (roomRef.current !== room.id) {
+          roomRef.current = room.id;
           snapshotRef.current = null;
           setSnapshot(null);
+          setIdentity(null);
           lastRevision.current = 0;
           stream.reset(0);
         }
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const query = new URLSearchParams({ room: status.room.id });
+        const query = new URLSearchParams({ room: room.id });
         if (resumeRevision !== null) query.set("revision", String(resumeRevision));
         socket = new WebSocket(`${protocol}//${window.location.host}/ws/lobby?${query}`);
         socketRef.current = socket;
@@ -187,12 +187,14 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
       socket?.close();
       if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [generation, router]);
+  }, [generation, router, requestedRoomId]);
 
   useEffect(() => {
     const islandId = snapshot?.place?.islandId;
-    if (pathname.startsWith("/islands/") && islandId && pathname.split("/")[2] !== islandId) router.replace(`/islands/${islandId}`);
-  }, [pathname, router, snapshot?.place?.islandId]);
+    if (pathname.startsWith("/islands/") && islandId && pathname.split("/")[2] !== islandId && identity?.roomId) {
+      router.replace(`/islands/${islandId}?room=${encodeURIComponent(identity.roomId)}`);
+    }
+  }, [pathname, router, snapshot?.place?.islandId, identity?.roomId]);
 
   const send = useCallback((command: GameCommand) => {
     const socket = socketRef.current;
@@ -211,7 +213,7 @@ export function PlayProvider({ children }: { children: React.ReactNode }) {
     setGeneration((value) => value + 1);
   };
 
-  if (!snapshot || !identity?.characterId) return (
+  if (!snapshot || !identity?.characterId || (requestedRoomId && identity.roomId !== requestedRoomId)) return (
     <main className="grid min-h-dvh place-content-center gap-5 bg-[#071316] px-6 text-center text-[#efece1]">
       <h1 className="font-[family-name:var(--font-display)] text-3xl">게임에 연결하는 중</h1>
       {error ? <p role="alert" className="text-sm text-amber-200">{error}</p> : <p className="text-sm text-[#aebdb9]">방의 현재 상태를 받고 있습니다.</p>}

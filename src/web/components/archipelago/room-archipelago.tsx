@@ -17,5 +17,5 @@ export function RoomArchipelago() {
       ? voyageHours(current.position, island.position)
       : null,
   }));
-  return <ArchipelagoHome key={party?.islandId ?? "none"} islands={entries} party={party} canLead={identity.role === "host"} travelOptions={state.moves.islands} onTravel={move.toIsland} pending={state.pending} />;
+  return <ArchipelagoHome key={party?.islandId ?? "none"} islands={entries} party={party} roomId={identity.roomId} canLead={identity.role === "host"} travelOptions={state.moves.islands} onTravel={move.toIsland} pending={state.pending} />;
 }

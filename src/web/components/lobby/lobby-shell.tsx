@@ -11,7 +11,7 @@ export function LobbyShell({ children, current }: { children: React.ReactNode; c
         </Link>
         <nav className={styles.nav} aria-label="게임 메뉴">
           <Link href="/rooms" aria-current={current === "rooms" ? "page" : undefined}>협동 플레이</Link>
-          <Link href="/explore">군도 지도</Link>
+          <Link href="/">군도 지도</Link>
         </nav>
         <span className={styles.topStatus}><span className={styles.statusDot} /> IP DIRECT</span>
       </header>

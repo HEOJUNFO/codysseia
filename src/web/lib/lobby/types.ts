@@ -8,6 +8,9 @@ export type RoomInfo = {
   phase: "waiting" | "playing";
 };
 
+export type LocalRoom = RoomInfo & { isMember: boolean };
+export type LocalRooms = { canHost: boolean; rooms: LocalRoom[] };
+
 export type MemberInfo = {
   id: string;
   name: string;

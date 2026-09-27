@@ -57,7 +57,7 @@ export function WaitingRoom() {
       if (change.type === "room_closed") setClosed(true);
       else if (change.type === "game_started") {
         setDetails((current) => current ? { ...current, room: change.room } : current);
-        router.replace("/explore");
+        router.replace(`/explore?room=${encodeURIComponent(roomId)}`);
       }
       else setMembers((current) => updateMembers(current, change));
     };
@@ -75,7 +75,7 @@ export function WaitingRoom() {
         stream.reset(message.seq);
         setMembers(message.members);
         setDetails((current) => current ? { ...current, room: message.room, code: message.code ?? current.code } : current);
-        if (message.room.phase === "playing") router.replace("/explore");
+        if (message.room.phase === "playing") router.replace(`/explore?room=${encodeURIComponent(roomId)}`);
         return;
       }
       if (message.type === "command_error") { setError(message.error); return; }

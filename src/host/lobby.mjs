@@ -32,19 +32,24 @@ function publicRoom(room) {
 }
 
 export class Lobby {
-  #room = null;
+  #rooms = new Map();
+  #roomIdsByCode = new Map();
   #createGame;
 
   constructor(createGame) {
     this.#createGame = createGame;
   }
 
-  currentRoom() {
-    return this.#room ? publicRoom(this.#room) : null;
+  listRooms() {
+    return Array.from(this.#rooms.values(), publicRoom);
+  }
+
+  room(roomId) {
+    const room = this.#rooms.get(roomId);
+    return room ? publicRoom(room) : null;
   }
 
   create({ name, islandId, capacity, hostName }) {
-    if (this.#room) throw new Error("이미 열려 있는 방이 있습니다.");
     const cleanName = String(name ?? "").trim();
     const cleanIslandId = String(islandId ?? "").trim();
     const slots = Number(capacity);
@@ -56,12 +61,14 @@ export class Lobby {
 
     const token = randomBytes(32).toString("base64url");
     const host = participant(cleanHostName, "host");
-    this.#room = {
+    let code = roomCode();
+    while (this.#roomIdsByCode.has(code)) code = roomCode();
+    const room = {
       id: randomUUID(),
       name: cleanName,
       islandId: cleanIslandId,
       capacity: slots,
-      code: roomCode(),
+      code,
       phase: "waiting",
       members: new Map([[token, host]]),
       sockets: new Map(),
@@ -69,14 +76,17 @@ export class Lobby {
       seq: 0,
       game: null,
     };
-    return { room: publicRoom(this.#room), code: this.#room.code, token, memberId: host.id };
+    this.#rooms.set(room.id, room);
+    this.#roomIdsByCode.set(code, room.id);
+    return { room: publicRoom(room), code, token, memberId: host.id };
   }
 
   join({ code, name, roomId }) {
-    const room = this.#room;
-    if (!room || (roomId && room.id !== roomId)) throw new Error("방을 찾을 수 없습니다.");
+    const cleanCode = String(code ?? "").trim().toUpperCase();
+    const room = this.#rooms.get(roomId || this.#roomIdsByCode.get(cleanCode));
+    if (!room) throw new Error("방을 찾을 수 없습니다.");
     if (room.phase !== "waiting") throw new Error("현재 입장할 수 없는 방입니다.");
-    if (String(code ?? "").trim().toUpperCase() !== room.code) throw new Error("방 코드가 맞지 않습니다.");
+    if (cleanCode !== room.code) throw new Error("방 코드가 맞지 않습니다.");
     const cleanName = String(name ?? "").trim();
     if (cleanName.length < 1 || cleanName.length > 24) throw new Error("플레이어 이름은 1~24자로 입력하세요.");
     if (room.members.size >= room.capacity) throw new Error("방이 가득 찼습니다.");
@@ -88,8 +98,8 @@ export class Lobby {
   }
 
   membership(token, roomId) {
-    const room = this.#room;
-    if (!room || room.id !== roomId) return null;
+    const room = this.#rooms.get(roomId);
+    if (!room) return null;
     const member = room.members.get(token);
     return member ? { room, member } : null;
   }
@@ -127,7 +137,7 @@ export class Lobby {
       this.#publish(room, { type: "member_updated", member });
     }
     socket.on("message", (data) => {
-      if (this.#room !== room || room.members.get(token) !== member) return;
+      if (this.#rooms.get(roomId) !== room || room.members.get(token) !== member) return;
       let message;
       try { message = JSON.parse(data.toString()); } catch { return; }
       if (!message || typeof message !== "object") return;
@@ -174,7 +184,7 @@ export class Lobby {
         this.#startGame(room, socket);
       } else if (message.type === "game_command" && room.game) {
         void room.game.execute(member.id, message.commandId, message.command).then((outcome) => {
-          if (this.#room !== room) return;
+          if (this.#rooms.get(roomId) !== room) return;
           if (outcome.ok && outcome.event) this.#broadcast(room, outcome.event);
           if (socket.readyState === 1) socket.send(JSON.stringify({
             type: "game_command_result",
@@ -184,7 +194,7 @@ export class Lobby {
           }));
         }).catch((error) => {
           console.error("[game] 명령 처리 실패", error);
-          if (this.#room === room && socket.readyState === 1) socket.send(JSON.stringify({
+          if (this.#rooms.get(roomId) === room && socket.readyState === 1) socket.send(JSON.stringify({
             type: "game_command_result",
             commandId: message.commandId,
             ok: false,
@@ -201,7 +211,7 @@ export class Lobby {
       sockets.delete(socket);
       if (sockets.size === 0) {
         room.sockets.delete(member.id);
-        if (room.members.get(token) === member && member.online && this.#room === room) {
+        if (room.members.get(token) === member && member.online && this.#rooms.get(roomId) === room) {
           member.online = false;
           member.ready = false;
           this.#publish(room, { type: "member_updated", member });
@@ -212,10 +222,11 @@ export class Lobby {
   }
 
   close(roomId) {
-    const room = this.#room;
-    if (!room || room.id !== roomId) return;
+    const room = this.#rooms.get(roomId);
+    if (!room) return;
     this.#publish(room, { type: "room_closed" });
-    this.#room = null;
+    this.#rooms.delete(roomId);
+    this.#roomIdsByCode.delete(room.code);
     room.game?.close();
     for (const sockets of room.sockets.values()) for (const socket of sockets) socket.close(1000, "room closed");
   }
