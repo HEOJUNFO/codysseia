@@ -1,0 +1,12 @@
+[project]
+name = "codysseia-concordia"
+version = "0.0.0"
+description = "Concordia 실험 환경 (호스트 Codex 로그인 사용, API 키 불필요)"
+requires-python = ">=3.12"
+dependencies = [
+  "gdm-concordia>=2.4",
+  "numpy>=1.26",
+]
+
+[tool.uv]
+package = false

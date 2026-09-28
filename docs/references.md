@@ -15,4 +15,5 @@
 
 설치된 스킬과 개발 도구는 [`AGENTS.md`](../AGENTS.md)에 정리돼 있다.
 - 에이전트 장기 메모리: [vectorize-io/hindsight](https://github.com/vectorize-io/hindsight) → `tools/hindsight/`
+- 생성형 에이전트 시뮬레이션: [google-deepmind/concordia](https://github.com/google-deepmind/concordia) (Apache-2.0) → `tools/concordia/`
 - 지식그래프: [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify) → `.agents/skills/graphify/`

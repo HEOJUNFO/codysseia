@@ -135,6 +135,16 @@ cd ~/.claude/skills/gstack && ./setup --host codex  # Codex도 쓰면
 - 게임 속 GM에는 같은 MCP 주소를 붙인다. 연결 방식은 `/src/gm` 설계 때 정한다.
 - 웹 UI(선택): `npx @vectorize-io/hindsight-control-plane --port 9999 --api-url http://localhost:8888`
 
+## 에이전트 시뮬레이션 (Concordia)
+
+[Concordia](https://github.com/google-deepmind/concordia)는 GM과 여러 에이전트가 자연어로 상호작용하는 시뮬레이션 라이브러리(Python)다. 섬의 NPC 행동, GM 판정 흐름을 게임 밖에서 미리 돌려 보는 실험용이다.
+- 실행: `./tools/concordia/run.sh [스크립트.py 인자...]` (기본 `smoke.py`: 두 사람 + 대화 GM). 의존성은 `uv`가 `tools/concordia/`에 알아서 설치한다.
+- 모델은 `codex_model.CodexLanguageModel`이 공식 `codex exec`로 부른다. API 키 불필요, 전용 `CODEX_HOME`(`~/.tragic_trpg/concordia-codex`), 작업 디렉터리는 저장소 밖(`~/.tragic_trpg/concordia-workspace`). 최초 실행 때 로그인을 한 번 한다.
+- 샘플 한 번이 `codex exec` 한 번이라 느리다 (스텝당 1~2분). 스텝 수를 작게 잡는다. 모델·추론 강도는 `CONCORDIA_CODEX_MODEL`, `CONCORDIA_CODEX_REASONING`(기본 `low`).
+- 임베더는 외부 모델 없는 해시 임베더(`embedder.py`)다. 기억 검색 품질이 필요하면 파일 주석대로 sentence-transformers로 바꾼다.
+- Concordia의 Game Master는 **실험용**이다. 실제 게임의 진실은 엔진 상태이고 게임 속 GM은 `src/gm`이다 (대전제 2.1). 시뮬레이션 결과로 섬 수치를 정하지 않는다.
+- 로그 HTML은 `tools/concordia/out/`에 남고 커밋하지 않는다.
+
 ## 지식그래프 (graphify)
 
 섬과 문서가 많아지면 `graphify`로 저장소를 그래프로 만들어 섬끼리 ID·설정 충돌을 찾는다.
