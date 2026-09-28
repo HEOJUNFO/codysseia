@@ -124,6 +124,7 @@ cd ~/.claude/skills/gstack && ./setup --host codex  # Codex도 쓰면
    `[projects."<이 저장소 절대경로>"]` + `trust_level = "trusted"` (또는 codex 첫 실행 때 신뢰 질문에 yes)
 3. 메모리 서버: `./tools/hindsight/run.sh` (최초 실행 때 hindsight 전용 Codex 로그인을 한 번 더 한다)
 4. (선택) 지식그래프 CLI `uv tool install graphifyy`
+5. (선택) NPC 시뮬레이션 참고 앱 ai-town: `.env`에 `AI_TOWN_OPENAI_API_KEY`를 넣고 `./tools/ai-town/run.sh`. 아래 "ai-town" 참고
 
 ## 장기 메모리 (hindsight)
 
@@ -151,6 +152,15 @@ cd ~/.claude/skills/gstack && ./setup --host codex  # Codex도 쓰면
 - CLI 설치: `uv tool install graphifyy` (y 두 개)
 - 결과물 `graphify-out/`은 커밋하지 않는다.
 - 문서·YAML 의미 추출은 모델 토큰을 쓴다. 필요할 때만 돌린다.
+
+## ai-town (NPC 시뮬레이션 참고)
+
+[a16z-infra/ai-town](https://github.com/a16z-infra/ai-town)을 로컬에서 띄워 NPC가 기억하고 성찰하며 서로 대화하는 루프를 관찰한다. 설계 참고용이며 우리 엔진·GM과 연결하지 않는다.
+- `./tools/ai-town/run.sh`가 고정 커밋을 `~/.tragic_trpg/ai-town/`에 받는다. Convex 백엔드는 docker로 자체 호스팅하고(`-p tragic-ai-town`), LLM은 OpenAI API를 쓴다. 키는 `.env`의 `AI_TOWN_OPENAI_API_KEY`이고 ai-town 전용이다. 게임 GM에는 넘기지 않는다.
+- 필요: docker 실행 중. 모델을 바꾸려면 `.env`의 `AI_TOWN_OPENAI_CHAT_MODEL`, `AI_TOWN_OPENAI_EMBEDDING_MODEL`(1536 차원만)을 쓴다.
+- 화면 `http://localhost:5173`(포트가 차 있으면 vite가 다른 포트를 출력한다), 대시보드 `http://localhost:6791`. 대시보드 관리 키는 `~/.tragic_trpg/ai-town/.env.local`에 있다.
+- 멈추기: Ctrl+C 후 `docker compose -p tragic-ai-town stop`. 버전을 올리려면 `run.sh`의 `AI_TOWN_REF`를 바꾼다.
+- ai-town 코드를 `src/`로 가져오지 않는다. 가져올 일이 생기면 설계부터 한다.
 
 ## 참고 자료
 

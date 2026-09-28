@@ -17,3 +17,4 @@
 - 에이전트 장기 메모리: [vectorize-io/hindsight](https://github.com/vectorize-io/hindsight) → `tools/hindsight/`
 - 생성형 에이전트 시뮬레이션: [google-deepmind/concordia](https://github.com/google-deepmind/concordia) (Apache-2.0) → `tools/concordia/`
 - 지식그래프: [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify) → `.agents/skills/graphify/`
+- NPC 사회 시뮬레이션 (로컬 실행 참고용): [a16z-infra/ai-town](https://github.com/a16z-infra/ai-town) → `tools/ai-town/run.sh`. NPC 기억·성찰·대화 루프를 직접 돌려 보며 템플릿 5. NPC와 대전제 9장 설계에 참고한다. 코드는 저장소 밖 `~/.tragic_trpg/ai-town/`에 받는다. MIT
